@@ -610,7 +610,7 @@ class DeskBackend:
 
         try:
             if name == "run_shell":
-                output = await self.execute_shell(arguments)
+                output = await self.execute_shell(arguments, prompt_id)
             elif name == "read_file":
                 output = await self.read_file(arguments)
             elif name == "write_file":
@@ -652,7 +652,7 @@ class DeskBackend:
         print(f"[APPROVAL] Got approval result: {result}", file=sys.stderr, flush=True)
         return result  # type: ignore[return-value]
 
-    async def execute_shell(self, arguments: JsonDict) -> str:
+    async def execute_shell(self, arguments: JsonDict, prompt_id: str) -> str:
         if not self.config:
             raise RuntimeError("Backend not configured.")
 
@@ -672,6 +672,9 @@ class DeskBackend:
                 "ts": now_iso(),
             }
         )
+
+        # Also emit as a chat message so it appears inline
+        await self.emit_token(prompt_id, f"\n```bash\n$ {command}\n```\n")
 
         process = await asyncio.create_subprocess_shell(
             command,
@@ -734,7 +737,13 @@ class DeskBackend:
         )
 
         combined = "".join(stdout_buffer + stderr_buffer)
-        return combined[-6000:] if len(combined) > 6000 else combined
+        truncated = combined[-6000:] if len(combined) > 6000 else combined
+        
+        # Show command output inline in chat
+        if truncated:
+            await self.emit_token(prompt_id, f"```\n{truncated}```\n")
+        
+        return truncated
 
     async def read_file(self, arguments: JsonDict) -> str:
         config = self.config

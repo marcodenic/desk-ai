@@ -280,10 +280,11 @@ textarea {
 }
 
 .message.approval {
-  align-self: center;
-  max-width: 100%;
-  background: linear-gradient(135deg, rgba(255, 193, 7, 0.15), rgba(255, 152, 0, 0.15));
-  border: 1px solid rgba(255, 193, 7, 0.3);
+  align-self: flex-start;
+  max-width: 80%;
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.12), rgba(255, 152, 0, 0.12));
+  border: 1px solid rgba(255, 193, 7, 0.25);
+  border-left: 3px solid rgba(255, 193, 7, 0.6);
 }
 
 .approval-content {
@@ -311,7 +312,7 @@ textarea {
 .approval-actions {
   display: flex;
   gap: 0.5rem;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 button.small {

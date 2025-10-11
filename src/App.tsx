@@ -76,7 +76,11 @@ function App() {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
   const [terminalOpen, setTerminalOpen] = useState(false);
-  const [settingsPanelOpen, setSettingsPanelOpen] = useState(true);
+  // Only open settings panel if no settings exist yet
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(() => {
+    const hasValidSettings = settings.apiKey && settings.workdir;
+    return !hasValidSettings;
+  });
 
   const settingsRef = useRef<Settings>(settings);
   useEffect(() => {
@@ -500,12 +504,7 @@ function App() {
           onReject={handleRejectFromChat}
         />
       </div>
-      <TerminalPane
-        open={terminalOpen}
-        sessions={terminalSessions}
-        onToggle={() => setTerminalOpen((value) => !value)}
-        onStop={handleStopSession}
-      />
+      {/* Terminal panel removed - commands shown inline in chat */}
     </div>
   );
 }
