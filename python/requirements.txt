@@ -1,0 +1,3 @@
+open-interpreter>=0.3
+openai>=1.40.0
+anthropic>=0.25.0
