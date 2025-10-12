@@ -134,6 +134,7 @@ function App() {
   useEffect(() => {
     const hasValidSettings = settings.apiKey && settings.workdir;
     if (hasValidSettings && backendStatus === "idle") {
+      console.log("[App] Auto-starting backend with saved settings");
       handleSaveSettings();
     }
   }, []); // Run once on mount
@@ -430,31 +431,53 @@ function App() {
 
     setSavingConfig(true);
     setBackendStatus("starting");
-    setBackendStatusMessage("Starting backend…");
+    setBackendStatusMessage("Configuring backend…");
 
     try {
-      await invoke("start_python_backend", {
-        config: {
-          provider: settings.provider,
-          apiKey: settings.apiKey,
-          model: settings.model,
-          workdir: settings.workdir,
-          autoApproveReads: settings.autoApproveReads,
-          confirmWrites: settings.confirmWrites,
-          confirmShell: settings.confirmShell,
-          showTerminalOnCommand: settings.showTerminalOnCommand,
-        },
-      });
+      // Check if backend is running by checking status
+      const isBackendRunning = backendStatus === "ready" || backendStatus === "starting";
       
-      // Actually test the credentials by sending a simple message
+      if (isBackendRunning) {
+        // Backend is running, just update config
+        await invoke("update_backend_config", {
+          config: {
+            provider: settings.provider,
+            apiKey: settings.apiKey,
+            model: settings.model,
+            workdir: settings.workdir,
+            autoApproveReads: settings.autoApproveReads,
+            confirmWrites: settings.confirmWrites,
+            confirmShell: settings.confirmShell,
+            showTerminalOnCommand: settings.showTerminalOnCommand,
+          },
+        });
+        setBackendStatusMessage("Configuration updated");
+      } else {
+        // Backend not running, start it
+        await invoke("start_python_backend", {
+          config: {
+            provider: settings.provider,
+            apiKey: settings.apiKey,
+            model: settings.model,
+            workdir: settings.workdir,
+            autoApproveReads: settings.autoApproveReads,
+            confirmWrites: settings.confirmWrites,
+            confirmShell: settings.confirmShell,
+            showTerminalOnCommand: settings.showTerminalOnCommand,
+          },
+        });
+        setBackendStatusMessage("Backend started");
+      }
+      
+      // Test the credentials by sending a simple message
       setBackendStatusMessage("Testing credentials…");
       setTestingCredentials(true);
       
-      // Wait a bit for the backend to be fully ready
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Small delay to ensure config is processed
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       try {
-        await invoke("send_agent_message", { message: "Hello, please respond with just 'OK' to confirm you're working." });
+        await invoke("send_agent_message", { message: "Reply with just 'OK' to confirm you're working." });
         // If we get here without error, credentials work
         setBackendStatus("ready");
         setBackendStatusMessage("Connection verified successfully!");
@@ -465,14 +488,14 @@ function App() {
         setTestingCredentials(false);
       }
     } catch (error) {
-      console.error("Failed to start backend", error);
+      console.error("Failed to configure backend", error);
       setBackendStatus("error");
-      setBackendStatusMessage(error instanceof Error ? error.message : "Failed to start backend");
+      setBackendStatusMessage(error instanceof Error ? error.message : "Failed to configure backend");
       setTestingCredentials(false);
     } finally {
       setSavingConfig(false);
     }
-  }, [settings]);
+  }, [settings, backendStatus]);
 
   const handleSendMessage = useCallback(
     async (content: string) => {

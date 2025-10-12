@@ -80,16 +80,14 @@ function Chat({ messages, thinking, backendStatus, disabled, onSend, onClear, on
           >
             {autoApproveAll ? "🔓 Auto Allow ON" : "🔒 Auto Allow OFF"}
           </button>
-          {!settingsPanelOpen && (
-            <button 
-              className="secondary" 
-              onClick={onToggleSettings}
-              title="Show settings"
-              style={{ marginRight: '8px' }}
-            >
-              ⚙️ Settings
-            </button>
-          )}
+          <button 
+            className="secondary" 
+            onClick={onToggleSettings}
+            title={settingsPanelOpen ? "Hide settings" : "Show settings"}
+            style={{ marginRight: '8px' }}
+          >
+            {settingsPanelOpen ? "⚙️ Hide Settings" : "⚙️ Settings"}
+          </button>
           <button className="secondary" onClick={onClear} disabled={messages.length === 0}>
             Clear Chat
           </button>

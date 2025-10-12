@@ -195,6 +195,31 @@ pub async fn start_backend(
     .canonicalize()
     .context("Failed to resolve working directory path")?;
 
+  // Check if backend is already running
+  if let Some(existing_handle) = state.get() {
+    eprintln!("[DEBUG] Backend already running, sending config update instead of restarting");
+    
+    let workdir_str = workdir.to_string_lossy().into_owned();
+    let runtime_config = RuntimeConfig {
+      msg_type: "config",
+      provider: &provider,
+      model: &model,
+      api_key: &api_key,
+      workdir: &workdir_str,
+      auto_approve_reads,
+      confirm_writes,
+      confirm_shell,
+    };
+
+    existing_handle
+      .send_config(&runtime_config)
+      .await
+      .context("Failed to send config update to backend")?;
+    
+    return Ok(());
+  }
+
+  // If not running, start a new backend
   let python_path = resolve_python_executable(python_path.as_deref())
     .context("Unable to locate a Python 3 executable")?;
 
@@ -203,17 +228,6 @@ pub async fn start_backend(
   eprintln!("[DEBUG] Python path: {:?}", python_path);
   eprintln!("[DEBUG] Script path: {:?}", script_path);
   eprintln!("[DEBUG] Working dir: {:?}", workdir);
-
-  // Stop any existing backend.
-  let existing = state.get();
-  if existing.is_some() {
-    eprintln!("[DEBUG] Backend already running, shutting down old instance");
-    if let Some(old) = state.replace(None) {
-      let _ = old.shutdown().await;
-    }
-    // Give it a moment to clean up
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-  }
 
   let mut command = Command::new(&python_path);
   command.arg(&script_path);
@@ -277,6 +291,52 @@ pub async fn start_backend(
     .context("Failed to send initial configuration to backend")?;
 
   state.replace(Some(handle));
+
+  Ok(())
+}
+
+pub async fn update_config(
+  state: tauri::State<'_, BackendState>,
+  config: BackendConfig,
+) -> Result<()> {
+  if !config.workdir.exists() {
+    return Err(anyhow!("Selected working directory does not exist."));
+  }
+
+  if !config.workdir.is_dir() {
+    return Err(anyhow!("Working directory path must point to a directory."));
+  }
+
+  if config.api_key.trim().is_empty() {
+    return Err(anyhow!("API key must not be empty."));
+  }
+
+  let handle = state
+    .get()
+    .ok_or_else(|| anyhow!("Backend process is not running. Call start_python_backend first."))?;
+
+  let workdir = config.workdir
+    .canonicalize()
+    .context("Failed to resolve working directory path")?;
+
+  let workdir_str = workdir.to_string_lossy().into_owned();
+
+  let runtime_config = RuntimeConfig {
+    msg_type: "config",
+    provider: &config.provider,
+    model: &config.model,
+    api_key: &config.api_key,
+    workdir: &workdir_str,
+    auto_approve_reads: config.auto_approve_reads,
+    confirm_writes: config.confirm_writes,
+    confirm_shell: config.confirm_shell,
+  };
+
+  eprintln!("[DEBUG] Sending config update to running backend");
+  handle
+    .send_config(&runtime_config)
+    .await
+    .context("Failed to send config update to backend")?;
 
   Ok(())
 }

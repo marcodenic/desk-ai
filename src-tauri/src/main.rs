@@ -28,6 +28,17 @@ async fn start_python_backend(
 }
 
 #[tauri::command]
+async fn update_backend_config(
+  state: tauri::State<'_, BackendState>,
+  config: BackendConfig,
+) -> Result<(), String> {
+  eprintln!("[COMMAND] update_backend_config called");
+  backend::update_config(state, config)
+    .await
+    .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 async fn send_agent_message(
   state: tauri::State<'_, BackendState>,
   message: String,
@@ -77,6 +88,7 @@ fn main() {
     .manage(BackendState::new())
     .invoke_handler(tauri::generate_handler![
       start_python_backend,
+      update_backend_config,
       send_agent_message,
       approve_tool,
       kill_command,
