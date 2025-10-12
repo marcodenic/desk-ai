@@ -23,6 +23,7 @@ def build():
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",  # Single executable
+        "--noconsole",  # Don't show console window (Windows)
         "--clean",  # Clean cache
         "--name", "desk-ai-backend",  # Output name
         "--hidden-import", "openai",

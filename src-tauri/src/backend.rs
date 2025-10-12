@@ -259,6 +259,14 @@ pub async fn start_backend(
   command.kill_on_drop(true);
   command.env("PYTHONUNBUFFERED", "1");
 
+  // On Windows, prevent console window from appearing for the subprocess
+  #[cfg(target_os = "windows")]
+  {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    command.creation_flags(CREATE_NO_WINDOW);
+  }
+
   eprintln!("[DEBUG] About to spawn: {:?}", script_path);
 
   let mut child = command
