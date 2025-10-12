@@ -46,6 +46,11 @@
       },
       "shell": {
         "all": false
+      },
+      "http": {
+        "all": false,
+        "request": true,
+        "scope": ["https://models.dev/*"]
       }
     }
   }
