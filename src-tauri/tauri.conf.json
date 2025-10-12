@@ -24,6 +24,9 @@
       ],
       "resources": [
         "../python/**/*"
+      ],
+      "externalBin": [
+        "bin/desk-ai-backend"
       ]
     },
     "security": {

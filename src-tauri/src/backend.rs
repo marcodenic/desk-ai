@@ -16,6 +16,7 @@ use tokio::{
 use uuid::Uuid;
 
 const PYTHON_BACKEND_RELATIVE: &str = "python/backend.py";
+const STANDALONE_BACKEND_NAME: &str = "desk-ai-backend";
 
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -230,22 +231,35 @@ pub async fn start_backend(
   }
 
   // If not running, start a new backend
-  let python_path = resolve_python_executable(python_path.as_deref())
-    .context("Unable to locate a Python 3 executable")?;
+  let script_path = resolve_backend_script(&app).context("Unable to locate backend")?;
 
-  let script_path = resolve_backend_script(&app).context("Unable to locate python/backend.py")?;
-
-  eprintln!("[DEBUG] Python path: {:?}", python_path);
-  eprintln!("[DEBUG] Script path: {:?}", script_path);
+  eprintln!("[DEBUG] Backend path: {:?}", script_path);
   eprintln!("[DEBUG] Working dir: {:?}", workdir);
 
-  let mut command = Command::new(&python_path);
-  command.arg(&script_path);
+  // Check if this is a standalone executable or needs Python
+  let is_standalone = script_path.extension().map_or(false, |ext| ext == "exe") 
+    || !script_path.extension().map_or(false, |ext| ext == "py");
+
+  let mut command = if is_standalone {
+    // Run standalone executable directly
+    eprintln!("[DEBUG] Using standalone executable");
+    Command::new(&script_path)
+  } else {
+    // Run Python script
+    eprintln!("[DEBUG] Using Python interpreter");
+    let python_path = resolve_python_executable(python_path.as_deref())
+      .context("Unable to locate a Python 3 executable")?;
+    eprintln!("[DEBUG] Python path: {:?}", python_path);
+    let mut cmd = Command::new(&python_path);
+    cmd.arg(&script_path);
+    cmd
+  };
+
   command.current_dir(&workdir);
   command.kill_on_drop(true);
   command.env("PYTHONUNBUFFERED", "1");
 
-  eprintln!("[DEBUG] About to spawn: {:?} {:?}", python_path, script_path);
+  eprintln!("[DEBUG] About to spawn: {:?}", script_path);
 
   let mut child = command
     .stdin(std::process::Stdio::piped())
@@ -531,7 +545,16 @@ fn resolve_python_executable(custom: Option<&str>) -> Result<String> {
 }
 
 fn resolve_backend_script(app: &AppHandle) -> Result<PathBuf> {
-  // First try the bundled resource path (for production builds)
+  // First try the standalone sidecar binary (for production builds)
+  if let Ok(sidecar_path) = tauri::api::process::Command::new_sidecar(STANDALONE_BACKEND_NAME) {
+    let path = PathBuf::from(sidecar_path.program());
+    if path.exists() {
+      eprintln!("[DEBUG] Found standalone backend sidecar: {:?}", path);
+      return Ok(path);
+    }
+  }
+
+  // Fall back to bundled Python script
   if let Some(path) = app.path_resolver().resolve_resource(PYTHON_BACKEND_RELATIVE) {
     if path.exists() {
       eprintln!("[DEBUG] Found backend script via resource resolver: {:?}", path);
@@ -554,8 +577,6 @@ fn resolve_backend_script(app: &AppHandle) -> Result<PathBuf> {
   }
 
   Err(anyhow!(
-    "Unable to locate backend.py. Expected at {:?} or {:?}",
-    dev_path,
-    parent_dev_path
+    "Unable to locate backend. Tried sidecar, bundled resources, and dev paths."
   ))
 }
