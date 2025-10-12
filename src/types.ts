@@ -18,6 +18,7 @@ export interface Settings {
   confirmShell: boolean;
   autoApproveAll: boolean;
   showTerminalOnCommand: boolean;
+  allowSystemWide: boolean;
 }
 
 export type BackendStatus = "idle" | "starting" | "ready" | "error";

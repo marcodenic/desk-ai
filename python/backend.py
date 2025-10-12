@@ -110,6 +110,7 @@ class BackendConfig:
     auto_approve_reads: bool = True
     confirm_writes: bool = True
     confirm_shell: bool = True
+    allow_system_wide: bool = False
 
     @classmethod
     def from_payload(cls, payload: JsonDict) -> "BackendConfig":
@@ -138,6 +139,7 @@ class BackendConfig:
             auto_approve_reads=bool(payload.get("autoApproveReads", True)),
             confirm_writes=bool(payload.get("confirmWrites", True)),
             confirm_shell=bool(payload.get("confirmShell", True)),
+            allow_system_wide=bool(payload.get("allowSystemWide", False)),
         )
 
 
@@ -1188,9 +1190,22 @@ class DeskBackend:
             raise RuntimeError("Backend not configured.")
         if not relative:
             raise ToolExecutionError("Path argument is required.")
+        
+        # If allow_system_wide is enabled, treat absolute paths as-is
+        if self.config.allow_system_wide:
+            candidate = Path(relative).expanduser().resolve()
+            # If it's already absolute, use it directly
+            if Path(relative).is_absolute():
+                return candidate
+        
+        # Otherwise, resolve relative to workdir
         candidate = (self.config.workdir / relative).resolve()
-        if not str(candidate).startswith(str(self.config.workdir)):
-            raise ToolExecutionError("Access outside of workspace is denied.")
+        
+        # If not in system-wide mode, enforce sandbox
+        if not self.config.allow_system_wide:
+            if not str(candidate).startswith(str(self.config.workdir)):
+                raise ToolExecutionError("Access outside of workspace is denied.")
+        
         return candidate
 
     async def emit_token(self, prompt_id: str, delta: str) -> None:

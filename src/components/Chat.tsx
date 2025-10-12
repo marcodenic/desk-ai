@@ -15,9 +15,11 @@ interface ChatProps {
   onReject: () => void;
   autoApproveAll: boolean;
   onToggleAutoApprove: () => void;
+  allowSystemWide: boolean;
+  onToggleSystemWide: () => void;
 }
 
-function Chat({ messages, thinking, backendStatus, disabled, onSend, onClear, onToggleSettings, settingsPanelOpen, approvalRequest, onApprove, onReject, autoApproveAll, onToggleAutoApprove }: ChatProps) {
+function Chat({ messages, thinking, backendStatus, disabled, onSend, onClear, onToggleSettings, settingsPanelOpen, approvalRequest, onApprove, onReject, autoApproveAll, onToggleAutoApprove, allowSystemWide, onToggleSystemWide }: ChatProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -79,6 +81,14 @@ function Chat({ messages, thinking, backendStatus, disabled, onSend, onClear, on
             style={{ marginRight: '8px' }}
           >
             {autoApproveAll ? "🔓 Auto Allow ON" : "🔒 Auto Allow OFF"}
+          </button>
+          <button 
+            className={allowSystemWide ? "primary" : "secondary"}
+            onClick={onToggleSystemWide}
+            title={allowSystemWide ? "System-wide access enabled (can access any file)" : "Restricted to working directory only"}
+            style={{ marginRight: '8px' }}
+          >
+            {allowSystemWide ? "🌍 System-Wide" : "📁 Workdir Only"}
           </button>
           <button 
             className="secondary" 

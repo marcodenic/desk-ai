@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS: Settings = {
   confirmShell: true,
   showTerminalOnCommand: true,
   autoApproveAll: false,
+  allowSystemWide: false,
 };
 
 const SETTINGS_STORAGE_KEY = "desk-ai::settings";
@@ -90,6 +91,7 @@ function saveSettings(settings: Settings): void {
     confirmShell: settings.confirmShell,
     showTerminalOnCommand: settings.showTerminalOnCommand,
     autoApproveAll: settings.autoApproveAll,
+    allowSystemWide: settings.allowSystemWide,
   };
 
   window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
@@ -128,6 +130,7 @@ function App() {
     settings.confirmWrites,
     settings.confirmShell,
     settings.showTerminalOnCommand,
+    settings.allowSystemWide,
   ]);
 
   // Auto-start backend if settings are already configured
@@ -449,6 +452,7 @@ function App() {
             confirmWrites: settings.confirmWrites,
             confirmShell: settings.confirmShell,
             showTerminalOnCommand: settings.showTerminalOnCommand,
+            allowSystemWide: settings.allowSystemWide,
           },
         });
         setBackendStatusMessage("Configuration updated");
@@ -464,6 +468,7 @@ function App() {
             confirmWrites: settings.confirmWrites,
             confirmShell: settings.confirmShell,
             showTerminalOnCommand: settings.showTerminalOnCommand,
+            allowSystemWide: settings.allowSystemWide,
           },
         });
         setBackendStatusMessage("Backend started");
@@ -616,6 +621,8 @@ function App() {
           onReject={handleRejectFromChat}
           autoApproveAll={settings.autoApproveAll}
           onToggleAutoApprove={() => setSettings((prev) => ({ ...prev, autoApproveAll: !prev.autoApproveAll }))}
+          allowSystemWide={settings.allowSystemWide}
+          onToggleSystemWide={() => setSettings((prev) => ({ ...prev, allowSystemWide: !prev.allowSystemWide }))}
         />
       </div>
       {/* Terminal panel removed - commands shown inline in chat */}

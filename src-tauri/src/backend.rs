@@ -30,6 +30,8 @@ pub struct BackendConfig {
   pub confirm_writes: bool,
   #[serde(default = "default_true")]
   pub confirm_shell: bool,
+  #[serde(default = "default_false")]
+  pub allow_system_wide: bool,
   pub python_path: Option<String>,
 }
 
@@ -140,6 +142,8 @@ pub(crate) struct RuntimeConfig<'a> {
   confirm_writes: bool,
   #[serde(rename = "confirmShell")]
   confirm_shell: bool,
+  #[serde(rename = "allowSystemWide")]
+  allow_system_wide: bool,
 }
 
 #[derive(Serialize)]
@@ -161,6 +165,10 @@ pub(crate) struct PromptMessage {
 
 fn default_true() -> bool {
   true
+}
+
+fn default_false() -> bool {
+  false
 }
 
 pub async fn start_backend(
@@ -188,6 +196,7 @@ pub async fn start_backend(
     auto_approve_reads,
     confirm_writes,
     confirm_shell,
+    allow_system_wide,
     python_path,
   } = config;
 
@@ -209,6 +218,7 @@ pub async fn start_backend(
       auto_approve_reads,
       confirm_writes,
       confirm_shell,
+      allow_system_wide,
     };
 
     existing_handle
@@ -283,6 +293,7 @@ pub async fn start_backend(
     auto_approve_reads,
     confirm_writes,
     confirm_shell,
+    allow_system_wide,
   };
 
   handle
@@ -330,6 +341,7 @@ pub async fn update_config(
     auto_approve_reads: config.auto_approve_reads,
     confirm_writes: config.confirm_writes,
     confirm_shell: config.confirm_shell,
+    allow_system_wide: config.allow_system_wide,
   };
 
   eprintln!("[DEBUG] Sending config update to running backend");
