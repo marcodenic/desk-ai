@@ -30,8 +30,6 @@ pub struct BackendConfig {
   pub confirm_writes: bool,
   #[serde(default = "default_true")]
   pub confirm_shell: bool,
-  #[serde(default = "default_true")]
-  pub show_terminal_on_command: bool,
   pub python_path: Option<String>,
 }
 
@@ -142,8 +140,6 @@ pub(crate) struct RuntimeConfig<'a> {
   confirm_writes: bool,
   #[serde(rename = "confirmShell")]
   confirm_shell: bool,
-  #[serde(rename = "showTerminalOnCommand")]
-  show_terminal_on_command: bool,
 }
 
 #[derive(Serialize)]
@@ -192,7 +188,6 @@ pub async fn start_backend(
     auto_approve_reads,
     confirm_writes,
     confirm_shell,
-    show_terminal_on_command,
     python_path,
   } = config;
 
@@ -274,7 +269,6 @@ pub async fn start_backend(
     auto_approve_reads,
     confirm_writes,
     confirm_shell,
-    show_terminal_on_command,
   };
 
   handle

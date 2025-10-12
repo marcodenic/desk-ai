@@ -100,6 +100,7 @@ function App() {
   const [backendStatus, setBackendStatus] = useState<BackendStatus>("idle");
   const [backendStatusMessage, setBackendStatusMessage] = useState<string>();
   const [savingConfig, setSavingConfig] = useState(false);
+  const [testingCredentials, setTestingCredentials] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
@@ -318,17 +319,21 @@ function App() {
     if (payload && typeof payload === "object" && "type" in payload && payload.type === "error") {
       setBackendStatus("error");
       setBackendStatusMessage(payload.message ?? "Backend error");
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: `Error: ${payload.message}`,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
+      
+      // Don't add error to chat if we're just testing credentials
+      if (!testingCredentials) {
+        setMessages((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `Error: ${payload.message}`,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
     }
-  }, []);
+  }, [testingCredentials]);
 
   const handleToolLog = useCallback((payload: BackendEvent) => {
     if (payload && typeof payload === "object" && "type" in payload && payload.type === "tool_log") {
@@ -436,11 +441,30 @@ function App() {
           showTerminalOnCommand: settings.showTerminalOnCommand,
         },
       });
+      
+      // Actually test the credentials by sending a simple message
       setBackendStatusMessage("Testing credentials…");
+      setTestingCredentials(true);
+      
+      // Wait a bit for the backend to be fully ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      try {
+        await invoke("send_agent_message", { message: "Hello, please respond with just 'OK' to confirm you're working." });
+        // If we get here without error, credentials work
+        setBackendStatus("ready");
+        setBackendStatusMessage("Connection verified successfully!");
+      } catch (testError) {
+        console.error("Credential test failed", testError);
+        // Error will be set by handleBackendError listener
+      } finally {
+        setTestingCredentials(false);
+      }
     } catch (error) {
       console.error("Failed to start backend", error);
       setBackendStatus("error");
       setBackendStatusMessage(error instanceof Error ? error.message : "Failed to start backend");
+      setTestingCredentials(false);
     } finally {
       setSavingConfig(false);
     }

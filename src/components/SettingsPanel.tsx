@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { fetch as tauriFetch } from '@tauri-apps/api/http';
 import type { BackendStatus, Provider, Settings } from "../types";
 
 interface SettingsPanelProps {
@@ -9,12 +10,65 @@ interface SettingsPanelProps {
   onChange: (changes: Partial<Settings>) => void;
   onSave: () => void;
   onSelectDirectory: () => void;
+  onReset?: () => void;
 }
 
 const providerOptions: Array<{ id: Provider; label: string }> = [
   { id: "openai", label: "OpenAI" },
   { id: "anthropic", label: "Anthropic Claude" },
 ];
+
+interface ModelData {
+  id: string;
+  name: string;
+  tool_call?: boolean;
+  [key: string]: any;
+}
+
+interface ProviderData {
+  id: string;
+  models: Record<string, ModelData>;
+  [key: string]: any;
+}
+
+// Fetch models from models.dev API using Tauri's HTTP client (bypasses CORS)
+async function fetchModels(): Promise<Record<Provider, string[]>> {
+  console.log('[SettingsPanel] Fetching from models.dev API using Tauri HTTP...');
+  
+  const response = await tauriFetch<Record<string, ProviderData>>('https://models.dev/api.json', {
+    method: 'GET',
+    timeout: 30,
+  });
+  
+  console.log('[SettingsPanel] Response status:', response.status);
+  const data = response.data;
+  console.log('[SettingsPanel] Data received, has anthropic?', 'anthropic' in data);
+  console.log('[SettingsPanel] Data received, has openai?', 'openai' in data);
+  
+  // Extract Anthropic models
+  const anthropicModels = data.anthropic?.models 
+    ? Object.values(data.anthropic.models)
+        .filter(m => m.tool_call === true)
+        .map(m => m.id)
+        .sort()
+    : [];
+  
+  // Extract OpenAI models
+  const openaiModels = data.openai?.models 
+    ? Object.values(data.openai.models)
+        .filter(m => m.tool_call === true)
+        .map(m => m.id)
+        .sort()
+    : [];
+  
+  console.log('[SettingsPanel] Anthropic models found:', anthropicModels.length, anthropicModels);
+  console.log('[SettingsPanel] OpenAI models found:', openaiModels.length);
+  
+  return {
+    anthropic: anthropicModels,
+    openai: openaiModels,
+  };
+}
 
 function SettingsPanel({
   settings,
@@ -24,7 +78,32 @@ function SettingsPanel({
   onChange,
   onSave,
   onSelectDirectory,
+  onReset,
 }: SettingsPanelProps) {
+  const [models, setModels] = useState<Record<Provider, string[]>>({
+    anthropic: [],
+    openai: [],
+  });
+  const [loadingModels, setLoadingModels] = useState(true);
+
+  // Fetch models on mount
+  useEffect(() => {
+    console.log('[SettingsPanel] Component mounted, starting fetch...');
+    setLoadingModels(true);
+    
+    fetchModels()
+      .then((fetchedModels) => {
+        console.log('[SettingsPanel] ✓ Fetch complete!');
+        console.log('[SettingsPanel] Setting models state:', fetchedModels);
+        setModels(fetchedModels);
+        setLoadingModels(false);
+      })
+      .catch((error) => {
+        console.error('[SettingsPanel] ✗ Fetch FAILED:', error);
+        setLoadingModels(false);
+      });
+  }, []);
+
   const statusColor = useMemo(() => {
     switch (backendStatus) {
       case "ready":
@@ -37,6 +116,17 @@ function SettingsPanel({
         return "#8a92a6";
     }
   }, [backendStatus]);
+
+  // Get available models for current provider
+  const availableModels = useMemo(() => {
+    const result = models[settings.provider] || [];
+    console.log('[SettingsPanel] availableModels calculated for provider:', settings.provider);
+    console.log('[SettingsPanel] Result:', result.length, 'models');
+    if (result.length > 0) {
+      console.log('[SettingsPanel] First 3 models:', result.slice(0, 3));
+    }
+    return result;
+  }, [settings.provider, models]);
 
   return (
     <aside className="settings-panel">
@@ -73,14 +163,38 @@ function SettingsPanel({
       </div>
 
       <div className="form-group">
-        <label htmlFor="model">Model</label>
-        <input
-          id="model"
-          type="text"
-          value={settings.model}
-          onChange={(event) => onChange({ model: event.target.value })}
-          placeholder={settings.provider === "openai" ? "gpt-4o-mini" : "claude-3-5-sonnet-latest"}
-        />
+        <label htmlFor="model">
+          Model
+          {!loadingModels && (
+            <span style={{ marginLeft: '8px', fontSize: '0.75rem', color: '#8a92a6' }}>
+              ({availableModels.length} available)
+            </span>
+          )}
+        </label>
+        {loadingModels ? (
+          <div style={{ padding: '8px', color: '#ffa502' }}>
+            Loading models from models.dev...
+          </div>
+        ) : availableModels.length === 0 ? (
+          <div style={{ padding: '8px', color: '#ff6b81' }}>
+            Failed to load models. Please refresh the page.
+          </div>
+        ) : (
+          <select
+            id="model"
+            value={availableModels.includes(settings.model) ? settings.model : availableModels[0]}
+            onChange={(event) => {
+              console.log('[SettingsPanel] User selected model:', event.target.value);
+              onChange({ model: event.target.value });
+            }}
+          >
+            {availableModels.map((modelId: string) => (
+              <option key={modelId} value={modelId}>
+                {modelId}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="form-group">
@@ -89,8 +203,8 @@ function SettingsPanel({
           id="apiKey"
           type="password"
           value={settings.apiKey}
-          onChange={(event) => onChange({ apiKey: event.target.value })}
-          placeholder={settings.provider === "openai" ? "sk-…" : "anthropic-…"}
+          onChange={(event) => onChange({ apiKey: event.target.value.trim() })}
+          placeholder={settings.provider === "openai" ? "sk-…" : "sk-ant-…"}
           autoComplete="off"
         />
       </div>
@@ -134,20 +248,26 @@ function SettingsPanel({
           />
           <span>Confirm shell commands</span>
         </label>
-
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={settings.showTerminalOnCommand}
-            onChange={(event) => onChange({ showTerminalOnCommand: event.target.checked })}
-          />
-          <span>Show terminal drawer on command start</span>
-        </label>
       </div>
 
-      <button className="primary" onClick={onSave} disabled={saving}>
-        {saving ? "Testing…" : "Save & Test"}
-      </button>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button className="primary" onClick={onSave} disabled={saving} style={{ flex: 1 }}>
+          {saving ? "Testing…" : "Save & Test"}
+        </button>
+        {onReset && (
+          <button 
+            className="secondary" 
+            onClick={() => {
+              if (confirm("Reset all settings to defaults? This will clear your API key and other configuration.")) {
+                onReset();
+              }
+            }}
+            disabled={saving}
+          >
+            Reset
+          </button>
+        )}
+      </div>
     </aside>
   );
 }

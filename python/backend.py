@@ -67,7 +67,6 @@ class BackendConfig:
     auto_approve_reads: bool = True
     confirm_writes: bool = True
     confirm_shell: bool = True
-    show_terminal_on_command: bool = True
 
     @classmethod
     def from_payload(cls, payload: JsonDict) -> "BackendConfig":
@@ -96,7 +95,6 @@ class BackendConfig:
             auto_approve_reads=bool(payload.get("autoApproveReads", True)),
             confirm_writes=bool(payload.get("confirmWrites", True)),
             confirm_shell=bool(payload.get("confirmShell", True)),
-            show_terminal_on_command=bool(payload.get("showTerminalOnCommand", True)),
         )
 
 
@@ -630,6 +628,44 @@ class DeskBackend:
                     "required": ["path"],
                 },
             },
+            {
+                "name": "search_files",
+                "description": "Search for text content across multiple files in the workspace. Returns matching lines with file paths and line numbers. Useful for finding documentation, code patterns, or specific content across directories.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Text pattern to search for (supports regex if regex=true)",
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Directory to search in (relative to workspace root). Defaults to '.' (entire workspace)",
+                            "default": ".",
+                        },
+                        "file_pattern": {
+                            "type": "string",
+                            "description": "Glob pattern to filter files (e.g., '*.md', '*.py', '*.{md,txt}'). Defaults to all files.",
+                        },
+                        "regex": {
+                            "type": "boolean",
+                            "description": "Whether to treat query as regex pattern. Defaults to false (plain text search).",
+                            "default": False,
+                        },
+                        "case_sensitive": {
+                            "type": "boolean",
+                            "description": "Whether search should be case-sensitive. Defaults to false.",
+                            "default": False,
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Maximum number of matching lines to return. Defaults to 100.",
+                            "default": 100,
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
         ]
 
     async def handle_tool_call(self, name: str, arguments: Optional[JsonDict], prompt_id: str) -> str:
@@ -658,9 +694,9 @@ class DeskBackend:
         elif name in {"write_file", "delete_path"}:
             approval_required = self.config.confirm_writes
             approval_reason = arguments.get("path", "")
-        elif name in {"read_file", "list_directory"}:
+        elif name in {"read_file", "list_directory", "search_files"}:
             approval_required = not self.config.auto_approve_reads
-            approval_reason = arguments.get("path", "")
+            approval_reason = arguments.get("path", "") or arguments.get("query", "")
 
         if approval_required:
             approved, overrides = await self.request_approval(
@@ -695,6 +731,8 @@ class DeskBackend:
                 output = await self.list_directory(arguments)
             elif name == "delete_path":
                 output = await self.delete_path(arguments)
+            elif name == "search_files":
+                output = await self.search_files(arguments)
             else:
                 output = f"Unknown tool: {name}"
         except ToolExecutionError as error:
@@ -900,6 +938,91 @@ class DeskBackend:
             target.unlink()
         await self.emit_tool_log(f"delete {target.relative_to(config.workdir)}")
         return f"Deleted {target.name}."
+
+    async def search_files(self, arguments: JsonDict) -> str:
+        """Search for text content across files in the workspace."""
+        import re
+        from pathlib import Path
+        
+        config = self.config
+        if not config:
+            raise RuntimeError("Backend not configured.")
+        
+        query = arguments.get("query", "")
+        if not query:
+            raise ToolExecutionError("Query argument is required.")
+        
+        search_path = arguments.get("path", ".")
+        file_pattern = arguments.get("file_pattern")
+        use_regex = arguments.get("regex", False)
+        case_sensitive = arguments.get("case_sensitive", False)
+        max_results = arguments.get("max_results", 100)
+        
+        # Resolve the search directory
+        search_dir = self._resolve_path(search_path)
+        if not search_dir.exists():
+            raise ToolExecutionError(f"Directory does not exist: {search_dir}")
+        if not search_dir.is_dir():
+            raise ToolExecutionError(f"Path is not a directory: {search_dir}")
+        
+        # Compile search pattern
+        if use_regex:
+            try:
+                flags = 0 if case_sensitive else re.IGNORECASE
+                pattern = re.compile(query, flags)
+            except re.error as e:
+                raise ToolExecutionError(f"Invalid regex pattern: {e}")
+        else:
+            # Plain text search - escape regex special chars and make case-insensitive if needed
+            escaped = re.escape(query)
+            flags = 0 if case_sensitive else re.IGNORECASE
+            pattern = re.compile(escaped, flags)
+        
+        # Collect matching files based on pattern
+        if file_pattern:
+            files = list(search_dir.glob(f"**/{file_pattern}"))
+        else:
+            files = [f for f in search_dir.rglob("*") if f.is_file()]
+        
+        # Search through files
+        results = []
+        files_searched = 0
+        
+        for file_path in files:
+            # Skip binary files and common non-text files
+            if file_path.suffix in {'.pyc', '.so', '.o', '.a', '.png', '.jpg', '.jpeg', '.gif', '.pdf', '.zip', '.tar', '.gz'}:
+                continue
+            
+            try:
+                # Try to read as text
+                content = file_path.read_text(encoding='utf-8', errors='ignore')
+                lines = content.splitlines()
+                files_searched += 1
+                
+                for line_num, line in enumerate(lines, start=1):
+                    if pattern.search(line):
+                        rel_path = file_path.relative_to(config.workdir)
+                        results.append(f"{rel_path}:{line_num}: {line.strip()}")
+                        
+                        if len(results) >= max_results:
+                            break
+                
+                if len(results) >= max_results:
+                    break
+                    
+            except (UnicodeDecodeError, PermissionError):
+                # Skip files we can't read
+                continue
+        
+        await self.emit_tool_log(f"search '{query}' in {search_path} ({files_searched} files searched, {len(results)} matches)")
+        
+        if not results:
+            return f"No matches found for '{query}' in {search_path}"
+        
+        result_text = f"Found {len(results)} matches" + (f" (showing first {max_results})" if len(results) >= max_results else "") + ":\n\n"
+        result_text += "\n".join(results)
+        
+        return result_text
 
     def _resolve_path(self, relative: Optional[str]) -> Path:
         if not self.config:

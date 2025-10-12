@@ -1,5 +1,13 @@
 export type Provider = "openai" | "anthropic";
 
+export interface ModelOption {
+  id: string;
+  name: string;
+  provider: Provider;
+  contextWindow?: number;
+  description?: string;
+}
+
 export interface Settings {
   provider: Provider;
   apiKey: string;
@@ -8,8 +16,8 @@ export interface Settings {
   autoApproveReads: boolean;
   confirmWrites: boolean;
   confirmShell: boolean;
-  showTerminalOnCommand: boolean;
   autoApproveAll: boolean;
+  showTerminalOnCommand: boolean;
 }
 
 export type BackendStatus = "idle" | "starting" | "ready" | "error";

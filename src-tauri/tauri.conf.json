@@ -16,7 +16,7 @@
       "resources": ["../python"]
     },
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      "csp": "default-src 'self'; connect-src 'self' https://models.dev; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
     },
     "windows": [
       {
@@ -38,6 +38,11 @@
       },
       "shell": {
         "all": false
+      },
+      "http": {
+        "all": false,
+        "request": true,
+        "scope": ["https://models.dev/api.json"]
       }
     }
   }
