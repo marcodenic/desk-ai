@@ -9,3 +9,36 @@ src-tauri/release
 .env
 .venv
 __pycache__
+
+# Security: Prevent committing credentials and secrets
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.*
+secret.*
+credentials.*
+*secret*.json
+*credentials*.json
+.env.*
+!.env.example
+
+# Security: Test files that might contain API keys
+test_*.py
+*_test.py
+test_*.js
+test_*.ts
+scratch.*
+debug_*.py
+debug_*.js
+
+# Security: Local configuration files
+local.settings.json
+.vscode/settings.json
+.idea/
+
+# Backup files that might contain sensitive data
+*.bak
+*.backup
+*.old
+*.orig

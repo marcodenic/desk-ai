@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""Test the tool result flow to see what we're sending to Anthropic
+
+⚠️  SECURITY WARNING: 
+This is a test file. NEVER commit API keys to version control!
+Use environment variables to store credentials.
+
+To use this script:
+1. Set your API key: export ANTHROPIC_API_KEY='your-key-here'
+2. Run: python test_tool_flow.py
+"""
+
+import json
+import os
+
+# Simulate what we're building
+tool_results = [
+    {
+        "type": "tool_result",
+        "tool_use_id": "toolu_01KzmkPvoHDaZSK3XUYEYx9u",
+        "content": "Linux marco-ThinkPad-P1-Gen-4i 5.15.0-157-generic #167-Ubuntu SMP Wed Sep 17 21:35:53 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux",
+    }
+]
+
+# Simulate the assistant message blocks
+assistant_content = [
+    {"type": "text", "text": "I'll check what operating system is running on this laptop."},
+    {
+        "type": "tool_use",
+        "id": "toolu_01KzmkPvoHDaZSK3XUYEYx9u",
+        "name": "run_shell",
+        "input": {"command": "uname -a"},
+    }
+]
+
+# Build messages like we do in the code
+input_messages = [
+    {"role": "user", "content": [{"type": "text", "text": "what OS is this laptop?"}]}
+]
+
+follow_up_messages = input_messages + [
+    {"role": "assistant", "content": assistant_content},
+    {"role": "user", "content": tool_results},
+]
+
+print("=" * 80)
+print("MESSAGES STRUCTURE BEING SENT TO ANTHROPIC:")
+print("=" * 80)
+print(json.dumps(follow_up_messages, indent=2))
+print()
+print("=" * 80)
+print("Now let's test if this actually works with Anthropic API...")
+print("=" * 80)
+
+# Now test with actual API
+import asyncio
+from anthropic import AsyncAnthropic
+
+async def test_api():
+    # ⚠️ SECURITY: Load API key from environment variable
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("❌ Error: ANTHROPIC_API_KEY environment variable not set")
+        print("Set it with: export ANTHROPIC_API_KEY='your-key-here'")
+        return
+    
+    client = AsyncAnthropic(api_key=api_key)
+    
+    # Define tools like in the app
+    tools = [
+        {
+            "name": "run_shell",
+            "description": "Execute a shell command",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "The shell command to execute"}
+                },
+                "required": ["command"]
+            }
+        }
+    ]
+    
+    try:
+        print("\n🔄 Sending request to Anthropic API WITH tools...")
+        response = await client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            messages=follow_up_messages,
+            tools=tools,
+        )
+        
+        print(f"\n✅ Response received!")
+        print(f"Stop reason: {response.stop_reason}")
+        print(f"Content blocks: {len(response.content)}")
+        for i, block in enumerate(response.content):
+            print(f"\nBlock {i}: {block.type}")
+            if hasattr(block, 'text'):
+                print(f"Text: {block.text[:200]}...")
+            
+    except Exception as e:
+        print(f"\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    asyncio.run(test_api())
