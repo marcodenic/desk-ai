@@ -16,5 +16,9 @@ tokio = { version = "1.38", features = ["macros", "rt-multi-thread", "process", 
 uuid = { version = "1.8", features = ["serde", "v4"] }
 which = "4.4"
 
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+default = ["custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "1.5", features = [] }

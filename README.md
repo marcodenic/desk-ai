@@ -1,238 +1,197 @@
 # 🖥️ Desk AI
 
-Your personal AI-powered system administrator and technical assistant. Desk AI brings advanced AI capabilities directly to your desktop—no complicated setup, no browser extensions, just a clean, focused tool for getting things done on your computer.
+Your personal AI-powered desktop assistant that can read files, execute commands, and help you get things done—all while keeping you in complete control.
 
-Whether you need to troubleshoot system issues, search through project files, automate repetitive tasks, or get instant answers about your system configuration, Desk AI provides an intelligent assistant that can actually interact with your files and execute commands—all while keeping you in complete control.
+![Desk AI Screenshot](screenshot.png)
 
-## ✨ Features
+## 🎯 What is Desk AI?
 
-- **🤖 Dual AI Provider Support** – Choose between OpenAI or Anthropic Claude for powerful natural language understanding
-- **🔒 Sandboxed Workspace** – All operations are restricted to your selected directory—escapes are automatically blocked
-- **✅ Granular Approval System** – Review and approve file writes, deletes, and shell commands before execution
-- **💬 Streaming Chat Interface** – Real-time responses with inline tool execution visibility
-- **🛠️ Comprehensive Tool Suite**:
-  - `run_shell` – Execute terminal commands with live streaming output
-  - `read_file` – Read and analyze file contents
-  - `write_file` – Create or modify files
-  - `list_directory` – Browse directory contents
-  - `delete_path` – Remove files or directories safely
-  - `search_files` – Search across multiple files with regex support
-- **⚡ Real-Time Feedback** – See every command, file operation, and tool call as it happens
-- **🎨 Clean, Distraction-Free UI** – No IDE bloat, just a focused assistant for getting work done
-- **🔍 Intelligent Context** – The AI understands your system, file structure, and can reason about technical problems
-- **🚀 Zero Configuration** – Works immediately with just an API key and workspace selection
+Desk AI is a native desktop application that brings AI assistance directly to your computer. Unlike browser-based tools, Desk AI can actually interact with your files and system—reading code, running commands, searching directories, and automating tasks—all through natural conversation.
 
-## 📋 Prerequisites
+Think of it as having an intelligent assistant that understands your system and can help with:
+- 🐛 **Debugging issues** by reading logs and analyzing error messages
+- 📁 **Managing files** across your projects with smart search and organization
+- ⚡ **Automating tasks** like batch operations, file cleanup, or report generation
+- 🔍 **Analyzing code** to understand project structure and dependencies
+- 🛠️ **System administration** tasks like checking disk space, processes, and configuration
 
-- **Node.js** ≥ 18 and npm
-- **Rust** toolchain (required by Tauri)
-- **Python** 3.10+ with pip
+## ✨ Key Features
 
-## 🚀 Getting Started
+- **🤖 Your Choice of AI** – Use OpenAI (GPT-4, etc.) or Anthropic Claude
+- **🔒 Security First** – Sandboxed workspace mode or optional system-wide access with approval controls
+- **✅ Stay in Control** – Review and approve file changes and commands before they execute
+- **💬 Real-Time Chat** – See AI responses stream in with live tool execution feedback
+- **🌍 System-Wide Mode** – Toggle between restricted workspace or full system access
+- **🛠️ Powerful Tools**:
+  - Execute terminal commands with streaming output
+  - Read, write, and search files
+  - List directories and analyze file structure
+  - Safe file deletion with confirmation
+  - Regex-based multi-file search
 
-### Installation
+## 🚀 Quick Start
+
+### 1. Download & Install
+
+**Option A: Download Pre-built Release (Easiest)**
+
+Go to [Releases](https://github.com/marcodenic/desk-ai/releases) and download the installer for your platform:
+- **Windows**: `.msi` installer
+- **macOS**: `.dmg` or `.app` bundle
+- **Linux**: `.deb`, `.rpm`, or `.AppImage`
+
+**Option B: Build from Source**
+
+If you prefer to build it yourself:
 
 ```bash
 # Clone the repository
 git clone https://github.com/marcodenic/desk-ai.git
 cd desk-ai
 
-# Install JavaScript dependencies
+# Install dependencies
 npm install
-
-# Install Python dependencies
 pip install -r python/requirements.txt
-```
 
-### Development
-
-```bash
-# Run in development mode
-npm run tauri:dev
-```
-
-This starts the Vite dev server and launches the Tauri desktop application.
-
-### Building
-
-```bash
-# Build production bundles
-npm run build
+# Build the application
 npm run tauri:build
 ```
 
-The bundled application includes the Python backend and all necessary dependencies.
+Find your installer in `src-tauri/target/release/bundle/`
 
-## 💡 How to Use
+### 2. Get an API Key
 
-### Initial Setup
+You'll need an API key from one of these providers:
 
-1. **🔑 Configure Provider**
-   - Choose between OpenAI or Anthropic
-   - Enter your API key
-   - Select your preferred model (e.g., `gpt-4o-mini` or `claude-3-5-sonnet-latest`)
-   - Click **Save & Test** to verify credentials
+**OpenAI (GPT-4, GPT-4o, etc.)**
+- Sign up at [platform.openai.com/signup](https://platform.openai.com/signup)
+- Go to [API Keys](https://platform.openai.com/api-keys) to create a new key
+- Recommended models: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`
 
-2. **📁 Select Workspace**
-   - Choose a working directory
-   - All AI operations will be restricted to this folder and its subfolders
-   - Perfect for isolating projects or limiting access to sensitive areas
+**Anthropic (Claude)**
+- Sign up at [console.anthropic.com](https://console.anthropic.com)
+- Go to [API Keys](https://console.anthropic.com/settings/keys) to create a new key
+- Recommended models: `claude-3-5-sonnet-latest`, `claude-3-5-haiku-latest`
 
-### Working with Desk AI
+💡 **Tip**: Both providers offer free trial credits to get started!
 
-- **Ask questions** about your system, files, or configuration
-- **Request analysis** of codebases, logs, or documentation
-- **Execute commands** through natural language (e.g., "show me disk usage")
-- **Search and filter** across multiple files with complex queries
-- **Troubleshoot issues** by letting the AI investigate logs and system state
-- **Automate tasks** like file organization, batch operations, or report generation
+### 3. Configure Desk AI
 
-Tool calls appear inline with real-time execution status. When approval is required, you'll see exactly what the AI wants to do before it happens.
+1. **Launch the application**
+2. **Click the Settings icon** (⚙️) in the top-right
+3. **Choose your provider** (OpenAI or Anthropic)
+4. **Select a model** from the dropdown
+5. **Paste your API key**
+6. **Choose a working directory** where the AI can operate
+7. **Click "Save & Test"** to verify your credentials
 
-### Approval Controls
+### 4. Start Using It!
 
-- **Auto-approve reads**: Enable to skip confirmations for file reads and directory listings
-- **Confirm writes**: Control whether file modifications need approval
-- **Confirm shell commands**: Require approval before executing terminal commands
-- **Auto-approve all**: Disable all approval prompts (use with caution!)
+Try asking:
+- *"Show me all Python files in this directory"*
+- *"Find TODO comments in my code"*
+- *"What's using the most disk space?"*
+- *"Check if port 8080 is in use"*
+- *"Search all log files for errors from today"*
 
-### Example Prompts
-
-**Real-World Problems Desk AI Can Solve:**
-```
-"My Bluetooth mouse keeps disconnecting, help me figure out why"
-"Find the directories using the most hard drive space and tell me what's in them"
-"My laptop is running slow, check what's consuming resources"
-"I can't connect to the database, help me debug the connection"
-"Find all instances where I'm using deprecated functions"
-"My Docker container won't start, check the logs and tell me what's wrong"
-"Clean up old npm/pip cache files to free up space"
-```
-
-**System Administration & Troubleshooting:**
-```
-"Check my disk space and tell me which directories are taking up the most room"
-"What processes are using the most CPU right now?"
-"Find all log files modified in the last 24 hours"
-"Check if port 8080 is in use and tell me what's using it"
-"What's my current memory usage?"
-"Find all Python processes running on my system"
-"Why is my system running hot? Check CPU usage and running processes"
-```
-
-**File Management & Search:**
-```
-"Search for all TODO comments in my Python files"
-"Find all files larger than 100MB in this directory"
-"List all markdown files that mention 'API' or 'authentication'"
-"Show me all configuration files in this project"
-"Find duplicate files by comparing checksums"
-"What files have been modified in the last week?"
-```
-
-**Project Analysis & Documentation:**
-```
-"Read all the Python files and explain what this project does"
-"Find all the API endpoints defined in this codebase"
-"List all the dependencies used in this project"
-"Summarize the README and tell me how to get started"
-"Find all database queries in this application"
-"What environment variables does this project need?"
-```
-
-**System Configuration & Setup:**
-```
-"Check if Docker is installed and what version"
-"List all installed Python packages and their versions"
-"What version of Node.js do I have?"
-"Show me my git configuration"
-"What's in my PATH environment variable?"
-"Check my SSH config and list available keys"
-```
-
-**Automation & Batch Operations:**
-```
-"Rename all .txt files to .md in this directory"
-"Create a backup of all Python files to a backup folder"
-"Generate a CSV listing all files with their sizes"
-"Find and remove all __pycache__ directories"
-"Create a project structure for a new Python application"
-"Generate a comprehensive file tree of this directory"
-```
-
-**Debugging & Error Analysis:**
-```
-"Search all log files for error messages from today"
-"Find stack traces in the application logs"
-"Check if there are any broken symbolic links"
-"List all files with permission issues"
-"Find TODO, FIXME, and HACK comments across the codebase"
-"Check for common security issues in configuration files"
-```
-
-## 🏗️ Project Structure
-
-```
-desk-ai/
-├── src/                      # React frontend
-│   ├── components/          # UI components (Chat, Settings, Terminal)
-│   ├── App.tsx             # Main application logic
-│   └── types.ts            # TypeScript type definitions
-├── src-tauri/               # Rust/Tauri backend
-│   ├── src/
-│   │   ├── main.rs         # Tauri app entry point
-│   │   └── backend.rs      # Python process management
-│   └── tauri.conf.json     # Tauri configuration
-├── python/
-│   ├── backend.py          # Python agent with NDJSON protocol
-│   └── requirements.txt    # Python dependencies
-└── package.json            # Node.js dependencies & scripts
-```
-
-## 🔐 Security
+## 🔐 Security & Permissions
 
 Desk AI takes security seriously:
 
-- **Workspace Sandboxing**: All file operations are restricted to the selected directory
-- **Approval System**: Sensitive operations require user confirmation
-- **Pre-commit Hooks**: Prevents accidental API key commits
-- **Credential Protection**: API keys stored locally, never committed to git
+**Workspace Mode (Default)**
+- All file operations restricted to your chosen directory
+- Prevents accidental changes outside your project
+- Great for isolated development work
 
-See [SECURITY.md](SECURITY.md) for detailed security guidelines.
+**System-Wide Mode**
+- Access files anywhere on your system
+- Toggle with the 🌍 button in the top-right
+- Still requires approval for destructive operations
 
-## 🛠️ Technical Details
+**Approval Controls**
+- ✓ Auto-approve file reads and listings
+- ✓ Confirm writes and deletions
+- ✓ Confirm shell commands
+- ✓ Full auto-approve mode (use with caution)
 
-### Architecture
+All API keys are stored locally on your computer and never sent anywhere except to your chosen AI provider.
 
-- **Frontend**: React 18 + TypeScript + Vite
-- **Desktop Shell**: Tauri (Rust-based)
-- **AI Backend**: Python with asyncio
-- **Communication**: NDJSON protocol over stdin/stdout
-- **AI Providers**: OpenAI API & Anthropic Claude API
+## 💡 Example Use Cases
 
-### How It Works
+### Real-World Problems Desk AI Can Solve
 
-1. Tauri spawns the Python backend as a child process
-2. Frontend sends commands via Tauri's IPC to the Rust backend
-3. Rust backend forwards messages to Python via stdin (NDJSON)
-4. Python streams responses back via stdout (NDJSON)
-5. Rust backend emits events that React components listen to
-6. UI updates in real-time as tokens and tool calls stream in
+**System Troubleshooting**
+```
+"My Bluetooth keeps disconnecting, help me debug it"
+"Why is my laptop running slow? Check resources"
+"My Docker container won't start, check the logs"
+"Find what's using port 8080"
+```
 
-## 📝 License
+**File Management**
+```
+"Find all files larger than 100MB"
+"Search for TODO comments in my Python files"
+"List all files modified in the last week"
+"Clean up all __pycache__ directories"
+```
 
-MIT License - see LICENSE file for details.
+**Code Analysis**
+```
+"Read all the Python files and explain this project"
+"Find all API endpoints in this codebase"
+"What dependencies does this project use?"
+"Show me all database queries"
+```
 
-**Note**: This project uses `open-interpreter` (AGPL licensed) as a dependency. Review AGPL terms if you plan to distribute a modified closed-source version.
+**Automation**
+```
+"Rename all .txt files to .md in this directory"
+"Create a backup of all Python files"
+"Generate a CSV of all files with their sizes"
+"Find and remove duplicate files"
+```
 
-## 🤝 Contributing
+## 🏗️ For Developers
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+Want to contribute or build from source? Here's the technical overview:
+
+**Tech Stack**
+- Frontend: React 18 + TypeScript + Vite
+- Desktop: Tauri (Rust)
+- Backend: Python with asyncio
+- Communication: NDJSON over stdin/stdout
+
+**Project Structure**
+```
+desk-ai/
+├── src/              # React frontend
+├── src-tauri/        # Rust/Tauri app
+├── python/           # Python AI backend
+└── package.json      # Build scripts
+```
+
+**Development**
+```bash
+npm install
+pip install -r python/requirements.txt
+npm run tauri:dev
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+
+## � License
+
+MIT License - See [LICENSE](LICENSE) for details.
 
 ## 🙏 Acknowledgments
 
-Built with:
-- [Tauri](https://tauri.app/) - Desktop application framework
-- [React](https://react.dev/) - UI framework
-- [OpenAI](https://openai.com/) & [Anthropic](https://anthropic.com/) - AI providers
-- [Open Interpreter](https://github.com/KillianLucas/open-interpreter) - AI agent runtime
+Built with [Tauri](https://tauri.app/), [React](https://react.dev/), and powered by [OpenAI](https://openai.com/) and [Anthropic](https://anthropic.com/) APIs.
+
+## 🤝 Contributing
+
+Contributions welcome! Please feel free to submit issues or pull requests on [GitHub](https://github.com/marcodenic/desk-ai).
+
+---
+
+**Questions?** Open an issue on GitHub or check the [documentation](https://github.com/marcodenic/desk-ai/wiki).
