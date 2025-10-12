@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
-    from openai import OpenAI  # type: ignore
+    from openai import OpenAI, pydantic_function_tool  # type: ignore
+    from pydantic import BaseModel, Field
 except ImportError as exc:  # pragma: no cover
     raise SystemExit("openai package is required. Install via `pip install openai>=1.40.0`.") from exc
 
@@ -37,6 +38,47 @@ except ImportError as exc:  # pragma: no cover
 
 
 JsonDict = Dict[str, Any]
+
+
+# Pydantic models for OpenAI function tools
+class RunShellParams(BaseModel):
+    """Run a shell command in the workspace."""
+    command: str = Field(description="Command to run.")
+    timeout: int = Field(default=120, ge=1, le=300, description="Timeout in seconds.")
+
+
+class ReadFileParams(BaseModel):
+    """Read text content from a file inside the workspace."""
+    path: str = Field(description="Relative path to the file.")
+    max_bytes: int = Field(default=20000, description="Maximum bytes to read.")
+
+
+class WriteFileParams(BaseModel):
+    """Write text to a file inside the workspace, replacing existing content."""
+    path: str = Field(description="Relative path to the file.")
+    content: str = Field(description="Content to write to the file.")
+
+
+class ListDirectoryParams(BaseModel):
+    """List files and directories relative to the workspace."""
+    path: str = Field(default=".", description="Relative directory path.")
+    pattern: str = Field(default="", description="Optional glob pattern.")
+
+
+class DeletePathParams(BaseModel):
+    """Delete a file or directory inside the workspace."""
+    path: str = Field(description="Relative path to delete.")
+    recursive: bool = Field(default=False, description="Whether to delete recursively.")
+
+
+class SearchFilesParams(BaseModel):
+    """Search for text content across multiple files in the workspace."""
+    query: str = Field(description="Text pattern to search for (supports regex if regex=true).")
+    path: str = Field(default=".", description="Directory to search in (relative to workspace root).")
+    file_pattern: str = Field(default="", description="Glob pattern to filter files (e.g., '*.md', '*.py').")
+    regex: bool = Field(default=False, description="Whether to treat query as regex pattern.")
+    case_sensitive: bool = Field(default=False, description="Whether search should be case-sensitive.")
+    max_results: int = Field(default=100, description="Maximum number of matching lines to return.")
 
 
 SYSTEM_PROMPT = (
@@ -178,11 +220,10 @@ class DeskBackend:
         if not self.config:
             raise RuntimeError("Backend not configured.")
 
-        prompt = [{"role": "user", "content": [{"type": "text", "text": "Say OK"}]}]
-
         if self.config.provider == "openai":
             if not self.openai_client:
                 raise RuntimeError("OpenAI client not initialised.")
+            prompt = [{"type": "message", "role": "user", "content": "Say OK"}]
             response = self.openai_client.responses.create(
                 model=self.config.model,
                 input=prompt,
@@ -192,7 +233,8 @@ class DeskBackend:
         else:
             if not self.anthropic_client:
                 raise RuntimeError("Anthropic client not initialised.")
-            response = self.anthropic_client.messages.create(
+            prompt = [{"role": "user", "content": [{"type": "text", "text": "Say OK"}]}]
+            response = await self.anthropic_client.messages.create(
                 model=self.config.model,
                 max_tokens=16,
                 system=SYSTEM_PROMPT,
@@ -274,56 +316,128 @@ class DeskBackend:
         if self.config.provider == "openai":
             if not self.openai_client:
                 raise RuntimeError("OpenAI client missing.")
-            with self.openai_client.responses.stream(
-                model=self.config.model,
-                input=input_messages,
-                tools=tools,
-            ) as stream:
-                for event in stream:
-                    event_dict = event.model_dump()
-                    event_type = event_dict.get("type")
+            
+            # OpenAI Responses API uses a conversation-style approach with response chaining
+            previous_response_id = None
+            max_iterations = 10  # Prevent infinite loops
+            
+            for iteration in range(max_iterations):
+                # Track tool calls that need execution
+                tool_calls_to_execute: List[Dict[str, Any]] = []
+                text_parts: List[str] = []
+                
+                def run_openai_stream():
+                    nonlocal previous_response_id
+                    current_tool_calls: List[Dict[str, Any]] = []
+                    tool_calls_buffer: Dict[int, Dict[str, Any]] = {}
+                    current_item_index = -1
+                    collected_text: List[str] = []
+                    
+                    # Build request parameters
+                    request_params = {
+                        "model": self.config.model,
+                        "input": input_messages,
+                        "tools": tools,
+                    }
+                    
+                    # If we have a previous response, reference it
+                    if previous_response_id:
+                        request_params["previous_response_id"] = previous_response_id
+                    
+                    with self.openai_client.responses.stream(**request_params) as stream:
+                        for event in stream:
+                            event_dict = event.model_dump()
+                            event_type = event_dict.get("type")
+                            
+                            print(f"[OPENAI STREAM EVENT] {event_type}", file=sys.stderr, flush=True)
 
-                    if event_type == "response.output_text.delta":
-                        delta = event_dict.get("delta") or {}
-                        text_delta = delta.get("text") or ""
-                        if text_delta:
-                            aggregated_text.append(text_delta)
-                            asyncio.run_coroutine_threadsafe(
-                                self.emit_token(prompt_id, text_delta),
-                                self.loop,
-                            )
+                            if event_type == "response.created":
+                                # Capture the response ID for potential follow-up
+                                response_data = event_dict.get("response") or {}
+                                previous_response_id = response_data.get("id")
+                                print(f"[OPENAI] Response ID: {previous_response_id}", file=sys.stderr, flush=True)
 
-                    elif event_type == "response.output_tool_call":
-                        data = event_dict.get("output_tool_call") or event_dict.get("data") or {}
-                        call_id = data.get("id") or data.get("tool_call_id")
-                        name = data.get("name") or data.get("function", {}).get("name")
-                        arguments = data.get("arguments") or data.get("function", {}).get("arguments")
-                        if arguments and isinstance(arguments, str):
-                            try:
-                                arguments = json.loads(arguments)
-                            except json.JSONDecodeError:
-                                arguments = {}
-                        if not call_id or not name:
-                            continue
-                        tool_output = asyncio.run_coroutine_threadsafe(
-                            self.handle_tool_call(name, arguments, prompt_id),
-                            self.loop,
-                        ).result()
-                        stream.submit_tool_outputs(
-                            [
-                                {
-                                    "tool_call_id": call_id,
-                                    "output": tool_output,
-                                }
-                            ]
-                        )
+                            elif event_type == "response.output_item.added":
+                                item = event_dict.get("item") or {}
+                                current_item_index = event_dict.get("output_index", current_item_index)
+                                if item.get("type") == "function_call":
+                                    tool_calls_buffer[current_item_index] = {
+                                        "id": item.get("call_id"),
+                                        "name": item.get("name"),
+                                        "arguments": "",
+                                    }
+                                    print(f"[OPENAI] Started tool call: {item.get('name')}", file=sys.stderr, flush=True)
 
-                    elif event_type == "response.completed":
-                        break
+                            elif event_type == "response.function_call_arguments.delta":
+                                delta = event_dict.get("delta") or ""
+                                if current_item_index in tool_calls_buffer:
+                                    tool_calls_buffer[current_item_index]["arguments"] += delta
 
-                final = stream.get_final_response()
-                if final and final.output_text:
-                    aggregated_text = ["".join(final.output_text)]
+                            elif event_type == "response.function_call_arguments.done":
+                                # Tool call complete - add to execution list
+                                if current_item_index in tool_calls_buffer:
+                                    tool_call = tool_calls_buffer[current_item_index]
+                                    print(f"[OPENAI] Tool call ready: {tool_call['name']}", file=sys.stderr, flush=True)
+                                    current_tool_calls.append(tool_call)
+
+                            elif event_type == "response.output_text.delta":
+                                delta = event_dict.get("delta")
+                                if isinstance(delta, str):
+                                    text_delta = delta
+                                elif isinstance(delta, dict):
+                                    text_delta = delta.get("text") or ""
+                                else:
+                                    text_delta = ""
+                                
+                                if text_delta:
+                                    collected_text.append(text_delta)
+                                    asyncio.run_coroutine_threadsafe(
+                                        self.emit_token(prompt_id, text_delta),
+                                        self.loop,
+                                    )
+
+                            elif event_type == "response.completed":
+                                break
+
+                        return collected_text, current_tool_calls
+                
+                # Run the stream
+                text_parts, tool_calls_to_execute = await asyncio.to_thread(run_openai_stream)
+                
+                # If no tool calls, we're done
+                if not tool_calls_to_execute:
+                    aggregated_text = text_parts
+                    break
+                
+                # Execute all tool calls and add their outputs to the input
+                tool_outputs = []
+                for tool_call in tool_calls_to_execute:
+                    name = tool_call["name"]
+                    arguments_str = tool_call["arguments"]
+                    
+                    print(f"[OPENAI] Executing tool: {name} with args: {arguments_str}", file=sys.stderr, flush=True)
+                    
+                    try:
+                        arguments = json.loads(arguments_str) if arguments_str else {}
+                    except json.JSONDecodeError:
+                        arguments = {}
+                    
+                    # Execute the tool
+                    tool_output = await self.handle_tool_call(name, arguments, prompt_id)
+                    
+                    # Add tool output to input messages for next iteration
+                    tool_outputs.append({
+                        "type": "function_call_output",
+                        "call_id": tool_call["id"],
+                        "output": tool_output,
+                    })
+                
+                # Append tool outputs to input_messages for next iteration
+                input_messages.extend(tool_outputs)
+            
+            else:
+                # Max iterations reached
+                aggregated_text = text_parts + ["[Max tool iterations reached]"]
 
         else:
             if not self.anthropic_client:
@@ -550,21 +664,64 @@ class DeskBackend:
                     self.history.append({"role": "assistant", "content": final_followup_text})
 
     def _build_messages(self, user_text: str) -> List[JsonDict]:
-        """Build messages array for Anthropic (no system message in array)."""
-        messages: List[JsonDict] = []
-        messages.extend(
-            {
-                "role": item["role"],
-                "content": [{"type": "text", "text": item["content"]}],
-            }
-            for item in self.history
-        )
-        messages.append({"role": "user", "content": [{"type": "text", "text": user_text}]})
-        return messages
+        """Build messages array in the appropriate format for the provider."""
+        if not self.config:
+            raise RuntimeError("Backend not configured.")
+        
+        if self.config.provider == "openai":
+            # OpenAI Responses API format: messages with type field
+            messages: List[JsonDict] = [
+                {
+                    "type": "message",
+                    "role": "system",
+                    "content": SYSTEM_PROMPT
+                }
+            ]
+            messages.extend(
+                {
+                    "type": "message",
+                    "role": item["role"],
+                    "content": item["content"],
+                }
+                for item in self.history
+            )
+            messages.append({
+                "type": "message",
+                "role": "user",
+                "content": user_text
+            })
+            return messages
+        else:
+            # Anthropic format: no system in messages array, structured content
+            messages: List[JsonDict] = []
+            messages.extend(
+                {
+                    "role": item["role"],
+                    "content": [{"type": "text", "text": item["content"]}],
+                }
+                for item in self.history
+            )
+            messages.append({"role": "user", "content": [{"type": "text", "text": user_text}]})
+            return messages
 
     def _tool_definitions(self) -> List[JsonDict]:
-        """Return tool definitions in Anthropic's format."""
-        return [
+        """Return tool definitions in the appropriate format for the provider."""
+        if not self.config:
+            raise RuntimeError("Backend not configured.")
+        
+        # For OpenAI, use pydantic_function_tool
+        if self.config.provider == "openai":
+            return [
+                pydantic_function_tool(RunShellParams, name="run_shell", description="Run a shell command in the workspace. Use cautiously."),
+                pydantic_function_tool(ReadFileParams, name="read_file", description="Read text content from a file inside the workspace."),
+                pydantic_function_tool(WriteFileParams, name="write_file", description="Write text to a file inside the workspace, replacing existing content."),
+                pydantic_function_tool(ListDirectoryParams, name="list_directory", description="List files and directories relative to the workspace."),
+                pydantic_function_tool(DeletePathParams, name="delete_path", description="Delete a file or directory inside the workspace."),
+                pydantic_function_tool(SearchFilesParams, name="search_files", description="Search for text content across multiple files in the workspace. Returns matching lines with file paths and line numbers."),
+            ]
+        
+        # Anthropic format tools
+        anthropic_tools = [
             {
                 "name": "run_shell",
                 "description": "Run a shell command in the workspace. Use cautiously.",
@@ -668,6 +825,9 @@ class DeskBackend:
                 },
             },
         ]
+        
+        # Return Anthropic format
+        return anthropic_tools
 
     async def handle_tool_call(self, name: str, arguments: Optional[JsonDict], prompt_id: str) -> str:
         if not self.config:
