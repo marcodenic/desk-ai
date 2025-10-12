@@ -288,7 +288,7 @@ textarea {
 }
 
 .message.tool {
-  align-self: center;
+  align-self: flex-start;
   max-width: 80%;
   background: transparent;
   border: none;
