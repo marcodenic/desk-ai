@@ -21,6 +21,9 @@
         "icons/icon.png",
         "icons/icon.icns",
         "icons/icon.ico"
+      ],
+      "resources": [
+        "../python/**/*"
       ]
     },
     "security": {

@@ -17,7 +17,7 @@ Think of it as having an intelligent assistant that understands your system and 
 
 ## ✨ Key Features
 
-- **🤖 Your Choice of AI** – Use OpenAI (GPT-4, etc.) or Anthropic Claude
+- **🤖 Your Choice of AI** – Use OpenAI (GPT-5, etc.) or Anthropic Claude
 - **🔒 Security First** – Sandboxed workspace mode or optional system-wide access with approval controls
 - **✅ Stay in Control** – Review and approve file changes and commands before they execute
 - **💬 Real-Time Chat** – See AI responses stream in with live tool execution feedback
@@ -95,8 +95,6 @@ Try asking:
 - *"Search all log files for errors from today"*
 
 ## 🔐 Security & Permissions
-
-Desk AI takes security seriously:
 
 **Workspace Mode (Default)**
 - All file operations restricted to your chosen directory
