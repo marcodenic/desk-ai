@@ -546,8 +546,11 @@ fn resolve_python_executable(custom: Option<&str>) -> Result<String> {
 
 fn resolve_backend_script(app: &AppHandle) -> Result<PathBuf> {
   // First try the standalone sidecar binary (for production builds)
-  if let Ok(sidecar_path) = tauri::api::process::Command::new_sidecar(STANDALONE_BACKEND_NAME) {
-    let path = PathBuf::from(sidecar_path.program());
+  let sidecar_path = app.path_resolver()
+    .resolve_resource(format!("bin/{}", STANDALONE_BACKEND_NAME))
+    .or_else(|| app.path_resolver().resolve_resource(format!("bin/{}.exe", STANDALONE_BACKEND_NAME)));
+  
+  if let Some(path) = sidecar_path {
     if path.exists() {
       eprintln!("[DEBUG] Found standalone backend sidecar: {:?}", path);
       return Ok(path);
