@@ -16,6 +16,8 @@ import type {
   StatusEvent,
   TerminalSession,
   ToolRequestPayload,
+  ToolCallStartEvent,
+  ToolCallEndEvent,
 } from "./types";
 
 const DEFAULT_SETTINGS: Settings = {
@@ -27,9 +29,34 @@ const DEFAULT_SETTINGS: Settings = {
   confirmWrites: true,
   confirmShell: true,
   showTerminalOnCommand: true,
+  autoApproveAll: false,
 };
 
 const SETTINGS_STORAGE_KEY = "desk-ai::settings";
+
+function formatToolCall(name: string, args: Record<string, any>): string {
+  const argParts: string[] = [];
+  
+  if (name === "run_shell" && args.command) {
+    return `Running: ${args.command}`;
+  } else if (name === "read_file" && args.path) {
+    return `Reading file: ${args.path}`;
+  } else if (name === "write_file" && args.path) {
+    return `Writing file: ${args.path}`;
+  } else if (name === "list_directory" && args.path) {
+    return `Listing directory: ${args.path || "."}`;
+  } else if (name === "delete_path" && args.path) {
+    return `Deleting: ${args.path}`;
+  }
+  
+  // Fallback for unknown tools
+  for (const [key, value] of Object.entries(args)) {
+    if (value) {
+      argParts.push(`${key}=${String(value).substring(0, 50)}`);
+    }
+  }
+  return `${name}(${argParts.join(", ")})`;
+}
 
 function loadInitialSettings(): Settings {
   if (typeof window === "undefined") {
@@ -62,6 +89,7 @@ function saveSettings(settings: Settings): void {
     confirmWrites: settings.confirmWrites,
     confirmShell: settings.confirmShell,
     showTerminalOnCommand: settings.showTerminalOnCommand,
+    autoApproveAll: settings.autoApproveAll,
   };
 
   window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
@@ -126,6 +154,8 @@ function App() {
       await register<BackendEvent>("backend://final", handleFinal);
       await register<BackendEvent>("backend://error", handleBackendError);
       await register<BackendEvent>("backend://tool_log", handleToolLog);
+      await register<ToolCallStartEvent>("backend://tool_call_start", handleToolCallStart);
+      await register<ToolCallEndEvent>("backend://tool_call_end", handleToolCallEnd);
       await register<BackendEvent>("backend://python_stderr", handlePythonStderr);
       await register<BackendEvent>("backend://exit", handleBackendExit);
     }
@@ -163,6 +193,21 @@ function App() {
     if (payload.autoApproved) {
       return;
     }
+    
+    // Auto-approve if the global setting is enabled
+    if (settingsRef.current.autoApproveAll) {
+      const request: ApprovalRequest = {
+        requestId: payload.requestId,
+        action: payload.action,
+        path: payload.path,
+        command: payload.command,
+        description: payload.description,
+        bytes: payload.bytes,
+      };
+      resolveApproval(request, true);
+      return;
+    }
+    
     const request: ApprovalRequest = {
       requestId: payload.requestId,
       action: payload.action,
@@ -259,7 +304,8 @@ function App() {
           message.id === payload.id
             ? {
                 ...message,
-                content: payload.text,
+                // Don't overwrite content - it's already been streamed via tokens
+                // Just mark as no longer streaming
                 streaming: false,
               }
             : message
@@ -302,6 +348,37 @@ function App() {
         setTerminalOpen(true);
       }
     }
+  }, []);
+
+  const handleToolCallStart = useCallback((payload: ToolCallStartEvent) => {
+    // Add a tool message to show the tool is being called
+    const toolMessage: ChatMessage = {
+      id: payload.toolCallId,
+      role: "tool",
+      content: formatToolCall(payload.name, payload.arguments),
+      toolName: payload.name,
+      toolArgs: payload.arguments,
+      toolStatus: "executing",
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((current) => [...current, toolMessage]);
+  }, []);
+
+  const handleToolCallEnd = useCallback((payload: ToolCallEndEvent) => {
+    // Update the tool message to show completion
+    setMessages((current) =>
+      current.map((message) =>
+        message.id === payload.toolCallId
+          ? {
+              ...message,
+              toolStatus: payload.error ? "failed" : "completed",
+              content: payload.error 
+                ? `${message.content} - ${payload.error}`
+                : message.content,
+            }
+          : message
+      )
+    );
   }, []);
 
   const handlePythonStderr = useCallback((payload: BackendEvent) => {
@@ -502,6 +579,8 @@ function App() {
           approvalRequest={approvals[0] || null}
           onApprove={handleApproveFromChat}
           onReject={handleRejectFromChat}
+          autoApproveAll={settings.autoApproveAll}
+          onToggleAutoApprove={() => setSettings((prev) => ({ ...prev, autoApproveAll: !prev.autoApproveAll }))}
         />
       </div>
       {/* Terminal panel removed - commands shown inline in chat */}

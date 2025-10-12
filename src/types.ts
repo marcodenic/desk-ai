@@ -9,11 +9,12 @@ export interface Settings {
   confirmWrites: boolean;
   confirmShell: boolean;
   showTerminalOnCommand: boolean;
+  autoApproveAll: boolean;
 }
 
 export type BackendStatus = "idle" | "starting" | "ready" | "error";
 
-export type MessageRole = "user" | "assistant" | "system";
+export type MessageRole = "user" | "assistant" | "system" | "tool";
 
 export interface ChatMessage {
   id: string;
@@ -22,6 +23,9 @@ export interface ChatMessage {
   pending?: boolean;
   streaming?: boolean;
   createdAt: string;
+  toolName?: string;
+  toolArgs?: Record<string, any>;
+  toolStatus?: "pending" | "executing" | "completed" | "failed";
 }
 
 export type ToolAction = "shell" | "read" | "write" | "delete" | "list";
@@ -83,6 +87,21 @@ export interface ShellEndEvent {
   durationMs?: number;
 }
 
+export interface ToolCallStartEvent {
+  type: "tool_call_start";
+  toolCallId: string;
+  name: string;
+  arguments: Record<string, any>;
+  promptId: string;
+}
+
+export interface ToolCallEndEvent {
+  type: "tool_call_end";
+  toolCallId: string;
+  result: string;
+  error?: string;
+}
+
 export type BackendEvent =
   | ToolRequestPayload
   | TokenEvent
@@ -92,7 +111,9 @@ export type BackendEvent =
   | ShellStartEvent
   | ShellDataEvent
   | ShellEndEvent
-   | { type: "tool_log"; message: string; ts: string }
+  | ToolCallStartEvent
+  | ToolCallEndEvent
+  | { type: "tool_log"; message: string; ts: string }
   | { type: "python_stderr"; message: string }
   | { type: "exit"; code: number | null; signal: number | null };
 

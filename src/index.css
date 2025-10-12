@@ -287,6 +287,41 @@ textarea {
   border-left: 3px solid rgba(255, 193, 7, 0.6);
 }
 
+.message.tool {
+  align-self: center;
+  max-width: 80%;
+  background: rgba(76, 130, 255, 0.08);
+  border: none;
+  padding: 0;
+}
+
+.tool-call-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(76, 130, 255, 0.12);
+  border: 1px solid rgba(76, 130, 255, 0.25);
+  font-size: 0.85rem;
+}
+
+.tool-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.tool-name {
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: lowercase;
+}
+
+.tool-description {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
 .approval-content {
   margin-bottom: 0.75rem;
 }

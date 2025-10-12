@@ -12,9 +12,11 @@ interface ChatProps {
   approvalRequest: ApprovalRequest | null;
   onApprove: () => void;
   onReject: () => void;
+  autoApproveAll: boolean;
+  onToggleAutoApprove: () => void;
 }
 
-function Chat({ messages, backendStatus, disabled, onSend, onClear, onToggleSettings, settingsPanelOpen, approvalRequest, onApprove, onReject }: ChatProps) {
+function Chat({ messages, backendStatus, disabled, onSend, onClear, onToggleSettings, settingsPanelOpen, approvalRequest, onApprove, onReject, autoApproveAll, onToggleAutoApprove }: ChatProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -69,6 +71,14 @@ function Chat({ messages, backendStatus, disabled, onSend, onClear, onToggleSett
           </p>
         </div>
         <div className="chat-actions">
+          <button 
+            className={autoApproveAll ? "primary" : "secondary"}
+            onClick={onToggleAutoApprove}
+            title={autoApproveAll ? "Auto-approve is ON" : "Auto-approve is OFF"}
+            style={{ marginRight: '8px' }}
+          >
+            {autoApproveAll ? "🔓 Auto Allow ON" : "🔒 Auto Allow OFF"}
+          </button>
           {!settingsPanelOpen && (
             <button 
               className="secondary" 
@@ -129,7 +139,22 @@ interface MessageProps {
 
 function MessageBubble({ message }: MessageProps) {
   const isUser = message.role === "user";
-  const label = isUser ? "You" : "Assistant";
+  const isTool = message.role === "tool";
+  const label = isUser ? "You" : isTool ? "Tool" : "Assistant";
+
+  if (isTool) {
+    return (
+      <div className="message tool">
+        <div className="tool-call-chip">
+          <span className="tool-icon">
+            {message.toolStatus === "executing" ? "⚙️" : message.toolStatus === "completed" ? "✓" : "✗"}
+          </span>
+          <span className="tool-name">{message.toolName}</span>
+          <span className="tool-description">{message.content}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`message ${isUser ? "user" : "assistant"}`}>

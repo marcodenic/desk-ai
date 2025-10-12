@@ -450,41 +450,38 @@ class DeskBackend:
                     {"role": "user", "content": tool_results},
                 ]
                 
-                # Reset aggregated_text to avoid duplication
-                aggregated_text = []
+                # Create a NEW message ID for the follow-up response
+                followup_id = str(uuid.uuid4())
                 
-                print(f"[TOOL RESULTS] Follow-up messages structure:", file=sys.stderr, flush=True)
-                print(f"[TOOL RESULTS] assistant_content: {assistant_content}", file=sys.stderr, flush=True)
-                print(f"[TOOL RESULTS] tool_results: {tool_results}", file=sys.stderr, flush=True)
+                print(f"[TOOL RESULTS] Starting follow-up stream with NEW message ID: {followup_id}", file=sys.stderr, flush=True)
                 
-                print(f"[TOOL RESULTS] Starting follow-up stream with tool results", file=sys.stderr, flush=True)
-                
-                # Stream the follow-up response WITHOUT tools - force Claude to respond with text only
+                # Stream the follow-up response WITHOUT tools to force text response
                 async with self.anthropic_client.messages.stream(
                     model=self.config.model,
                     max_tokens=8192,
+                    system=SYSTEM_PROMPT,
                     messages=follow_up_messages,
-                    # Don't pass tools here - Claude must respond with text, not call more tools
+                    # Don't pass tools - we want a text response after tool execution
                 ) as follow_stream:
+                    followup_text = []
                     async for event in follow_stream:
                         event_dict = event.model_dump()
                         event_type = event_dict.get("type")
-                        print(f"[FOLLOW-UP STREAM] Event type: {event_type}", file=sys.stderr, flush=True)
                         
                         if event_type == "content_block_delta":
                             delta = event_dict.get("delta") or {}
                             if delta.get("type") == "text_delta":
                                 text_delta = delta.get("text") or ""
                                 if text_delta:
-                                    print(f"[FOLLOW-UP STREAM] Got text delta: {text_delta[:50]}", file=sys.stderr, flush=True)
-                                    aggregated_text.append(text_delta)
-                                    await self.emit_token(prompt_id, text_delta)
+                                    followup_text.append(text_delta)
+                                    await self.emit_token(followup_id, text_delta)
                         
                         elif event_type == "message_stop":
-                            print(f"[FOLLOW-UP STREAM] Message stop", file=sys.stderr, flush=True)
                             break
                     
-                    # We've already streamed all the text via emit_token, no need to get final message
+                    # Emit final for the follow-up message
+                    final_followup_text = "".join(followup_text).strip()
+                    await self.emit_final(followup_id, final_followup_text)
 
         final_text = "".join(aggregated_text).strip()
         asyncio.run_coroutine_threadsafe(self.emit_final(prompt_id, final_text), self.loop)
@@ -580,6 +577,18 @@ class DeskBackend:
             raise RuntimeError("Backend not configured.")
 
         arguments = arguments or {}
+        
+        # Generate a unique tool call ID
+        tool_call_id = str(uuid.uuid4())
+        
+        # Emit tool call start event
+        await self.emit_event({
+            "type": "tool_call_start",
+            "toolCallId": tool_call_id,
+            "name": name,
+            "arguments": arguments,
+            "promptId": prompt_id,
+        })
 
         approval_required = False
         approval_reason = ""
@@ -604,7 +613,14 @@ class DeskBackend:
                 },
             )
             if not approved:
-                return "User denied the request."
+                result = "User denied the request."
+                await self.emit_event({
+                    "type": "tool_call_end",
+                    "toolCallId": tool_call_id,
+                    "result": result,
+                    "error": "denied",
+                })
+                return result
             if overrides:
                 arguments.update(overrides)
 
@@ -623,7 +639,21 @@ class DeskBackend:
                 output = f"Unknown tool: {name}"
         except ToolExecutionError as error:
             await self.emit_error(str(error))
-            return f"Tool execution failed: {error}"
+            result = f"Tool execution failed: {error}"
+            await self.emit_event({
+                "type": "tool_call_end",
+                "toolCallId": tool_call_id,
+                "result": result,
+                "error": str(error),
+            })
+            return result
+
+        # Emit tool call end event
+        await self.emit_event({
+            "type": "tool_call_end",
+            "toolCallId": tool_call_id,
+            "result": output[:200] + ("..." if len(output) > 200 else ""),  # Truncate for display
+        })
 
         return output
 
@@ -672,9 +702,6 @@ class DeskBackend:
                 "ts": now_iso(),
             }
         )
-
-        # Also emit as a chat message so it appears inline
-        await self.emit_token(prompt_id, f"\n```bash\n$ {command}\n```\n")
 
         process = await asyncio.create_subprocess_shell(
             command,
@@ -739,11 +766,7 @@ class DeskBackend:
         combined = "".join(stdout_buffer + stderr_buffer)
         truncated = combined[-6000:] if len(combined) > 6000 else combined
         
-        # Show command output inline in chat
-        if truncated:
-            await self.emit_token(prompt_id, f"```\n{truncated}```\n")
-        
-        return truncated
+        return truncated if truncated else "(no output)"
 
     async def read_file(self, arguments: JsonDict) -> str:
         config = self.config
