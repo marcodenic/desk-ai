@@ -270,6 +270,7 @@ class DeskBackend:
         input_messages = self._build_messages(text)
         tools = self._tool_definitions()
         aggregated_text: List[str] = []
+        had_followup = False  # Track if we had a follow-up response
 
         if self.config.provider == "openai":
             if not self.openai_client:
@@ -426,69 +427,128 @@ class DeskBackend:
                 #         )
                 #     ]
             
-            # If we collected tool results, send them back in a follow-up message
+            # If we collected tool results, handle them recursively
             if tool_results:
-                print(f"[TOOL RESULTS] Sending {len(tool_results)} tool results back to Claude", file=sys.stderr, flush=True)
-                
-                # Add assistant's message with tool uses to history
-                assistant_content = []
-                if final_message:
-                    for block in final_message.content:
-                        if hasattr(block, 'text') and block.text:
-                            assistant_content.append({"type": "text", "text": block.text})
-                        elif hasattr(block, 'type') and block.type == 'tool_use':
-                            assistant_content.append({
-                                "type": "tool_use",
-                                "id": block.id,
-                                "name": block.name,
-                                "input": block.input,
-                            })
-                
-                # Build new messages with tool results
-                follow_up_messages = input_messages + [
-                    {"role": "assistant", "content": assistant_content},
-                    {"role": "user", "content": tool_results},
-                ]
-                
-                # Create a NEW message ID for the follow-up response
-                followup_id = str(uuid.uuid4())
-                
-                print(f"[TOOL RESULTS] Starting follow-up stream with NEW message ID: {followup_id}", file=sys.stderr, flush=True)
-                
-                # Stream the follow-up response WITHOUT tools to force text response
-                async with self.anthropic_client.messages.stream(
-                    model=self.config.model,
-                    max_tokens=8192,
-                    system=SYSTEM_PROMPT,
-                    messages=follow_up_messages,
-                    # Don't pass tools - we want a text response after tool execution
-                ) as follow_stream:
-                    followup_text = []
-                    async for event in follow_stream:
-                        event_dict = event.model_dump()
-                        event_type = event_dict.get("type")
-                        
-                        if event_type == "content_block_delta":
-                            delta = event_dict.get("delta") or {}
-                            if delta.get("type") == "text_delta":
-                                text_delta = delta.get("text") or ""
-                                if text_delta:
-                                    followup_text.append(text_delta)
-                                    await self.emit_token(followup_id, text_delta)
-                        
-                        elif event_type == "message_stop":
-                            break
-                    
-                    # Emit final for the follow-up message
-                    final_followup_text = "".join(followup_text).strip()
-                    await self.emit_final(followup_id, final_followup_text)
+                await self._handle_tool_results_recursively(
+                    tool_results=tool_results,
+                    input_messages=input_messages,
+                    final_message=final_message,
+                    tools=tools,
+                )
+                had_followup = True
 
         final_text = "".join(aggregated_text).strip()
         asyncio.run_coroutine_threadsafe(self.emit_final(prompt_id, final_text), self.loop)
 
-        # Update conversation history.
+        # Update conversation history with the user's message
         self.history.append({"role": "user", "content": text})
-        self.history.append({"role": "assistant", "content": final_text})
+        
+        # Only add the initial assistant response if we didn't have a follow-up
+        # If we had a follow-up, it already added the complete response to history
+        if final_text and not had_followup:
+            self.history.append({"role": "assistant", "content": final_text})
+
+    async def _handle_tool_results_recursively(
+        self,
+        tool_results: List[JsonDict],
+        input_messages: List[JsonDict],
+        final_message: Any,
+        tools: List[JsonDict],
+    ) -> None:
+        """Recursively handle tool results until Claude stops calling tools."""
+        print(f"[TOOL RESULTS] Sending {len(tool_results)} tool results back to Claude", file=sys.stderr, flush=True)
+        
+        # Add assistant's message with tool uses to history
+        assistant_content = []
+        if final_message:
+            for block in final_message.content:
+                if hasattr(block, 'text') and block.text:
+                    assistant_content.append({"type": "text", "text": block.text})
+                elif hasattr(block, 'type') and block.type == 'tool_use':
+                    assistant_content.append({
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input,
+                    })
+        
+        # Build new messages with tool results
+        follow_up_messages = input_messages + [
+            {"role": "assistant", "content": assistant_content},
+            {"role": "user", "content": tool_results},
+        ]
+        
+        # Create a NEW message ID for the follow-up response
+        followup_id = str(uuid.uuid4())
+        
+        print(f"[TOOL RESULTS] Starting follow-up stream with NEW message ID: {followup_id}", file=sys.stderr, flush=True)
+        
+        # Stream the follow-up response WITH tools so Claude can continue if needed
+        async with self.anthropic_client.messages.stream(
+            model=self.config.model,
+            max_tokens=8192,
+            system=SYSTEM_PROMPT,
+            messages=follow_up_messages,
+            tools=tools,
+        ) as follow_stream:
+            followup_text = []
+            followup_tool_results = []
+            
+            async for event in follow_stream:
+                event_dict = event.model_dump()
+                event_type = event_dict.get("type")
+                
+                if event_type == "content_block_delta":
+                    delta = event_dict.get("delta") or {}
+                    if delta.get("type") == "text_delta":
+                        text_delta = delta.get("text") or ""
+                        if text_delta:
+                            followup_text.append(text_delta)
+                            await self.emit_token(followup_id, text_delta)
+                
+                elif event_type == "content_block_stop":
+                    # Check if this was a tool use block
+                    block = event_dict.get("content_block") or {}
+                    if block.get("type") == "tool_use":
+                        tool_id = block.get("id")
+                        name = block.get("name")
+                        arguments = block.get("input", {})
+                        
+                        print(f"[RECURSIVE TOOL] Executing {name}", file=sys.stderr, flush=True)
+                        
+                        # Execute the tool
+                        tool_output = await self.handle_tool_call(name, arguments, followup_id)
+                        
+                        # Store for potential additional follow-up
+                        followup_tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": tool_output,
+                        })
+                
+                elif event_type == "message_stop":
+                    break
+            
+            # Get the final message from the follow-up
+            followup_final = await follow_stream.get_final_message()
+            
+            # Emit final for this follow-up message (even if there are more tool calls)
+            final_followup_text = "".join(followup_text).strip()
+            await self.emit_final(followup_id, final_followup_text)
+            
+            # If there were MORE tool calls, recurse
+            if followup_tool_results:
+                print(f"[RECURSIVE] Got {len(followup_tool_results)} more tool calls - recursing", file=sys.stderr, flush=True)
+                await self._handle_tool_results_recursively(
+                    tool_results=followup_tool_results,
+                    input_messages=follow_up_messages,
+                    final_message=followup_final,
+                    tools=tools,
+                )
+            else:
+                # No more tool calls - add the follow-up response to history
+                if final_followup_text:
+                    self.history.append({"role": "assistant", "content": final_followup_text})
 
     def _build_messages(self, user_text: str) -> List[JsonDict]:
         """Build messages array for Anthropic (no system message in array)."""
