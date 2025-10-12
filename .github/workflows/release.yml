@@ -64,8 +64,9 @@ jobs:
       - name: Copy standalone backend to resources (Windows)
         if: matrix.platform == 'windows-latest'
         run: |
-          mkdir -p src-tauri/bin
-          copy python\dist\desk-ai-backend.exe src-tauri\bin\desk-ai-backend-x86_64-pc-windows-msvc.exe
+          New-Item -ItemType Directory -Force -Path src-tauri\bin
+          Copy-Item python\dist\desk-ai-backend.exe src-tauri\bin\desk-ai-backend-x86_64-pc-windows-msvc.exe
+        shell: powershell
 
       - name: Copy standalone backend to resources (macOS)
         if: matrix.platform == 'macos-latest'

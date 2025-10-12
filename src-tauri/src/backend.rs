@@ -545,24 +545,38 @@ fn resolve_python_executable(custom: Option<&str>) -> Result<String> {
 }
 
 fn resolve_backend_script(app: &AppHandle) -> Result<PathBuf> {
-  // First try the standalone sidecar binary (for production builds)
-  let sidecar_path = app.path_resolver()
-    .resolve_resource(format!("bin/{}", STANDALONE_BACKEND_NAME))
-    .or_else(|| app.path_resolver().resolve_resource(format!("bin/{}.exe", STANDALONE_BACKEND_NAME)));
+  eprintln!("[DEBUG] Starting backend resolution...");
   
-  if let Some(path) = sidecar_path {
-    if path.exists() {
-      eprintln!("[DEBUG] Found standalone backend sidecar: {:?}", path);
-      return Ok(path);
+  // First try the standalone sidecar binary (for production builds)
+  // Try various possible locations
+  let possible_paths = vec![
+    format!("bin/{}", STANDALONE_BACKEND_NAME),
+    format!("bin/{}.exe", STANDALONE_BACKEND_NAME),
+    format!("{}", STANDALONE_BACKEND_NAME),
+    format!("{}.exe", STANDALONE_BACKEND_NAME),
+  ];
+  
+  for path_str in possible_paths {
+    if let Some(path) = app.path_resolver().resolve_resource(&path_str) {
+      eprintln!("[DEBUG] Checking: {:?} -> {:?} (exists: {})", path_str, path, path.exists());
+      if path.exists() {
+        eprintln!("[DEBUG] Found standalone backend sidecar: {:?}", path);
+        return Ok(path);
+      }
+    } else {
+      eprintln!("[DEBUG] Could not resolve resource: {:?}", path_str);
     }
   }
 
   // Fall back to bundled Python script
   if let Some(path) = app.path_resolver().resolve_resource(PYTHON_BACKEND_RELATIVE) {
+    eprintln!("[DEBUG] Checking Python script: {:?} (exists: {})", path, path.exists());
     if path.exists() {
       eprintln!("[DEBUG] Found backend script via resource resolver: {:?}", path);
       return Ok(path);
     }
+  } else {
+    eprintln!("[DEBUG] Could not resolve Python script resource: {:?}", PYTHON_BACKEND_RELATIVE);
   }
 
   // In development, try relative to current dir
