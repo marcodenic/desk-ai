@@ -290,7 +290,7 @@ textarea {
 .message.tool {
   align-self: center;
   max-width: 80%;
-  background: rgba(76, 130, 255, 0.08);
+  background: transparent;
   border: none;
   padding: 0;
 }
