@@ -38,7 +38,7 @@ def build():
     print(f"Command: {' '.join(cmd)}")
     subprocess.check_call(cmd)
     
-    print("\n✓ Build complete!")
+    print("\nBuild complete!")
     print(f"Executable: {Path('dist') / 'desk-ai-backend'}")
 
 if __name__ == "__main__":
