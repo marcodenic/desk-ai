@@ -102,6 +102,7 @@ function App() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [testingCredentials, setTestingCredentials] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [thinking, setThinking] = useState(false);
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -274,6 +275,9 @@ function App() {
 
   const handleToken = useCallback((payload: BackendEvent) => {
     if (payload && typeof payload === "object" && "type" in payload && payload.type === "token") {
+      // First token arrives - stop thinking indicator
+      setThinking(false);
+      
       setMessages((current) => {
         const next = [...current];
         const index = next.findIndex((message) => message.id === payload.id);
@@ -480,34 +484,17 @@ function App() {
         createdAt: now,
       };
       setMessages((current) => [...current, userMessage]);
+      
+      // Set thinking state - will be cleared when first token arrives
+      setThinking(true);
 
       try {
-        const assistantId = (await invoke<string>("send_agent_message", { message: content })).toString();
-        setMessages((current) => {
-          const exists = current.some((message) => message.id === assistantId);
-          if (exists) {
-            return current.map((message) =>
-              message.id === assistantId
-                ? {
-                    ...message,
-                    streaming: true,
-                  }
-                : message
-            );
-          }
-          return [
-            ...current,
-            {
-              id: assistantId,
-              role: "assistant",
-              content: "",
-              streaming: true,
-              createdAt: new Date().toISOString(),
-            },
-          ];
-        });
+        await invoke<string>("send_agent_message", { message: content });
+        // Don't pre-create assistant message anymore
+        // It will be created when the first token arrives
       } catch (error) {
         console.error("Failed to send message", error);
+        setThinking(false);
         setMessages((current) => [
           ...current,
           {
@@ -594,6 +581,7 @@ function App() {
         )}
         <Chat
           messages={messages}
+          thinking={thinking}
           backendStatus={backendStatus}
           disabled={chatDisabled || assistantStreaming}
           onSend={handleSendMessage}

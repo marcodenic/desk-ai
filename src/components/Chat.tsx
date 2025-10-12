@@ -3,6 +3,7 @@ import type { ApprovalRequest, BackendStatus, ChatMessage } from "../types";
 
 interface ChatProps {
   messages: ChatMessage[];
+  thinking: boolean;
   backendStatus: BackendStatus;
   disabled: boolean;
   onSend: (text: string) => Promise<void>;
@@ -16,7 +17,7 @@ interface ChatProps {
   onToggleAutoApprove: () => void;
 }
 
-function Chat({ messages, backendStatus, disabled, onSend, onClear, onToggleSettings, settingsPanelOpen, approvalRequest, onApprove, onReject, autoApproveAll, onToggleAutoApprove }: ChatProps) {
+function Chat({ messages, thinking, backendStatus, disabled, onSend, onClear, onToggleSettings, settingsPanelOpen, approvalRequest, onApprove, onReject, autoApproveAll, onToggleAutoApprove }: ChatProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -104,6 +105,20 @@ function Chat({ messages, backendStatus, disabled, onSend, onClear, onToggleSett
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
         ))}
+        {thinking && (
+          <div className="message assistant thinking">
+            <div className="message-meta">
+              <span className="message-label">Assistant</span>
+            </div>
+            <div className="message-body">
+              <div className="thinking-indicator">
+                <span className="dot"></span>
+                <span className="dot"></span>
+                <span className="dot"></span>
+              </div>
+            </div>
+          </div>
+        )}
         {approvalRequest && (
           <ApprovalBubble 
             request={approvalRequest}

@@ -317,47 +317,34 @@ class DeskBackend:
             if not self.openai_client:
                 raise RuntimeError("OpenAI client missing.")
             
-            # OpenAI Responses API uses a conversation-style approach with response chaining
-            previous_response_id = None
+            # OpenAI Responses API - handle tool calls in a loop
             max_iterations = 10  # Prevent infinite loops
             
             for iteration in range(max_iterations):
+                print(f"[OPENAI] Iteration {iteration + 1}", file=sys.stderr, flush=True)
+                
                 # Track tool calls that need execution
                 tool_calls_to_execute: List[Dict[str, Any]] = []
                 text_parts: List[str] = []
                 
                 def run_openai_stream():
-                    nonlocal previous_response_id
                     current_tool_calls: List[Dict[str, Any]] = []
                     tool_calls_buffer: Dict[int, Dict[str, Any]] = {}
                     current_item_index = -1
                     collected_text: List[str] = []
                     
-                    # Build request parameters
-                    request_params = {
-                        "model": self.config.model,
-                        "input": input_messages,
-                        "tools": tools,
-                    }
-                    
-                    # If we have a previous response, reference it
-                    if previous_response_id:
-                        request_params["previous_response_id"] = previous_response_id
-                    
-                    with self.openai_client.responses.stream(**request_params) as stream:
+                    with self.openai_client.responses.stream(
+                        model=self.config.model,
+                        input=input_messages,
+                        tools=tools,
+                    ) as stream:
                         for event in stream:
                             event_dict = event.model_dump()
                             event_type = event_dict.get("type")
                             
                             print(f"[OPENAI STREAM EVENT] {event_type}", file=sys.stderr, flush=True)
 
-                            if event_type == "response.created":
-                                # Capture the response ID for potential follow-up
-                                response_data = event_dict.get("response") or {}
-                                previous_response_id = response_data.get("id")
-                                print(f"[OPENAI] Response ID: {previous_response_id}", file=sys.stderr, flush=True)
-
-                            elif event_type == "response.output_item.added":
+                            if event_type == "response.output_item.added":
                                 item = event_dict.get("item") or {}
                                 current_item_index = event_dict.get("output_index", current_item_index)
                                 if item.get("type") == "function_call":
@@ -391,10 +378,8 @@ class DeskBackend:
                                 
                                 if text_delta:
                                     collected_text.append(text_delta)
-                                    asyncio.run_coroutine_threadsafe(
-                                        self.emit_token(prompt_id, text_delta),
-                                        self.loop,
-                                    )
+                                    # DON'T emit tokens yet - we'll emit them only if this is the final iteration
+                                    # (i.e., if there are no tool calls in this response)
 
                             elif event_type == "response.completed":
                                 break
@@ -404,13 +389,23 @@ class DeskBackend:
                 # Run the stream
                 text_parts, tool_calls_to_execute = await asyncio.to_thread(run_openai_stream)
                 
-                # If no tool calls, we're done
+                print(f"[OPENAI] Iteration {iteration + 1} complete - text parts: {len(text_parts)}, tool calls: {len(tool_calls_to_execute)}, total text: {len(aggregated_text)} parts", file=sys.stderr, flush=True)
+                
+                # If no tool calls, this is the final iteration - emit the text tokens now
                 if not tool_calls_to_execute:
-                    aggregated_text = text_parts
+                    print(f"[OPENAI] Final iteration - emitting {len(text_parts)} text parts", file=sys.stderr, flush=True)
+                    # Emit all collected text as tokens
+                    for text_part in text_parts:
+                        await self.emit_token(prompt_id, text_part)
+                    # Add to aggregated text
+                    aggregated_text.extend(text_parts)
                     break
                 
+                # If there ARE tool calls, don't emit or aggregate the text yet
+                # (we'll wait for the AI's final response after tool execution)
+                print(f"[OPENAI] Iteration {iteration + 1} has tool calls - deferring text emission", file=sys.stderr, flush=True)
+                
                 # Execute all tool calls and add their outputs to the input
-                tool_outputs = []
                 for tool_call in tool_calls_to_execute:
                     name = tool_call["name"]
                     arguments_str = tool_call["arguments"]
@@ -425,15 +420,18 @@ class DeskBackend:
                     # Execute the tool
                     tool_output = await self.handle_tool_call(name, arguments, prompt_id)
                     
-                    # Add tool output to input messages for next iteration
-                    tool_outputs.append({
+                    # Add tool call and output to input messages for next iteration
+                    input_messages.append({
+                        "type": "function_call",
+                        "call_id": tool_call["id"],
+                        "name": name,
+                        "arguments": arguments_str,  # Must be a string, not an object
+                    })
+                    input_messages.append({
                         "type": "function_call_output",
                         "call_id": tool_call["id"],
                         "output": tool_output,
                     })
-                
-                # Append tool outputs to input_messages for next iteration
-                input_messages.extend(tool_outputs)
             
             else:
                 # Max iterations reached
