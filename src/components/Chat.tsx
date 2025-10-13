@@ -8,6 +8,7 @@ import { Badge, type BadgeProps } from "./ui/badge";
 import { ScrollArea } from "./ui/scroll-area";
 import { Textarea } from "./ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { Switch } from "./ui/switch";
 import { cn } from "../lib/utils";
 
 interface ChatProps {
@@ -122,71 +123,54 @@ function Chat({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex h-full flex-col bg-background">
-        <header className="flex items-center justify-between border-b border-border/40 bg-card/30 px-5 py-3.5">
+        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
           <div className="flex items-center gap-3">
-            <h1 className="text-base font-semibold tracking-tight">Chat</h1>
+            <h1 className="text-sm font-semibold">Chat</h1>
             <span className="text-xs text-muted-foreground">
               Ask the assistant to inspect files, edit code, or run shell commands
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {statusBadge}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={autoApproveAll ? "default" : "outline"}
-                  size="sm"
-                  onClick={onToggleAutoApprove}
-                  className="h-8 gap-1.5 text-xs font-medium"
-                >
-                  {autoApproveAll ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
-                  Auto Allow
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{autoApproveAll ? "Auto-approve enabled" : "Require approval"}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={allowSystemWide ? "default" : "outline"}
-                  size="sm"
-                  onClick={onToggleSystemWide}
-                  className="h-8 gap-1.5 text-xs font-medium"
-                >
-                  {allowSystemWide ? <Globe2 className="h-3.5 w-3.5" /> : "📁"}
-                  {allowSystemWide ? "Workdir Only" : "Workdir Only"}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{allowSystemWide ? "System-wide" : "Workdir only"}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={settingsPanelOpen ? "secondary" : "ghost"}
-                  size="sm"
-                  onClick={onToggleSettings}
-                  className="h-8 gap-1 text-xs"
-                >
-                  <Settings2 className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Toggle settings</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onClear}
-                  disabled={messages.length === 0}
-                  className="h-8 gap-1.5 text-xs"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Clear Chat
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Clear history</TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-1.5 text-xs">
+              <div className="h-2 w-2 rounded-full bg-green-500" />
+              <span className="text-gray-400">Online</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={autoApproveAll}
+                onCheckedChange={onToggleAutoApprove}
+              />
+              <label className="text-xs cursor-pointer" onClick={onToggleAutoApprove}>
+                Auto Allow
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={!allowSystemWide}
+                onCheckedChange={() => onToggleSystemWide()}
+              />
+              <label className="text-xs cursor-pointer" onClick={onToggleSystemWide}>
+                Workdir Only
+              </label>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleSettings}
+              className="h-7 w-7 p-0"
+            >
+              <Settings2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClear}
+              disabled={messages.length === 0}
+              className="h-7 gap-1.5 px-2.5 text-xs"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Clear Chat
+            </Button>
           </div>
         </header>
 
