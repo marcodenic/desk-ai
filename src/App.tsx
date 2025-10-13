@@ -326,8 +326,22 @@ function App() {
 
   const handleBackendError = useCallback((payload: BackendEvent) => {
     if (payload && typeof payload === "object" && "type" in payload && payload.type === "error") {
-      setBackendStatus("error");
-      setBackendStatusMessage(payload.message ?? "Backend error");
+      const errorMsg = payload.message ?? "Backend error";
+      
+      // Check if it's an authentication error
+      const isAuthError = errorMsg.toLowerCase().includes("401") || 
+                         errorMsg.toLowerCase().includes("unauthorized") ||
+                         errorMsg.toLowerCase().includes("authentication") ||
+                         errorMsg.toLowerCase().includes("invalid api key") ||
+                         errorMsg.toLowerCase().includes("incorrect api key");
+      
+      if (isAuthError) {
+        setBackendStatus("starting"); // Use "starting" status for auth errors (will show orange)
+        setBackendStatusMessage("Authentication failed - check API key");
+      } else {
+        setBackendStatus("error");
+        setBackendStatusMessage(errorMsg);
+      }
       
       // Don't add error to chat if we're just testing credentials
       if (!testingCredentials) {
@@ -336,7 +350,7 @@ function App() {
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: `Error: ${payload.message}`,
+            content: `Error: ${errorMsg}`,
             createdAt: new Date().toISOString(),
           },
         ]);
@@ -475,24 +489,9 @@ function App() {
         setBackendStatusMessage("Backend started");
       }
       
-      // Test the credentials by sending a simple message
-      setBackendStatusMessage("Testing credentials…");
-      setTestingCredentials(true);
-      
-      // Small delay to ensure config is processed
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      try {
-        await invoke("send_agent_message", { message: "Reply with just 'OK' to confirm you're working." });
-        // If we get here without error, credentials work
-        setBackendStatus("ready");
-        setBackendStatusMessage("Connection verified successfully!");
-      } catch (testError) {
-        console.error("Credential test failed", testError);
-        // Error will be set by handleBackendError listener
-      } finally {
-        setTestingCredentials(false);
-      }
+      // Backend will emit status events - we'll wait for them
+      // Status will update to "ready" via handleStatusEvent listener
+      // If there's an auth error, it will be caught on first actual use
     } catch (error) {
       console.error("Failed to configure backend", error);
       setBackendStatus("error");
