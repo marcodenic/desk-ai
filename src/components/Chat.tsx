@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown } from "lucide-react";
+import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown, Square } from "lucide-react";
 
 import type { ApprovalRequest, BackendStatus, ChatMessage } from "../types";
 import { Button } from "./ui/button";
@@ -17,6 +17,7 @@ interface ChatProps {
   backendStatus: BackendStatus;
   disabled: boolean;
   onSend: (text: string) => Promise<void>;
+  onStop: () => void;
   onClear: () => void;
   onToggleSettings: () => void;
   settingsPanelOpen: boolean;
@@ -35,6 +36,7 @@ function Chat({
   backendStatus,
   disabled,
   onSend,
+  onStop,
   onClear,
   onToggleSettings,
   settingsPanelOpen,
@@ -262,9 +264,22 @@ function Chat({
             />
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Press ⌘⏎ / Ctrl⏎ to send</span>
-              <Button type="submit" disabled={!canSend} size="sm" className="h-8 gap-1.5 px-4 font-medium">
-                {isStreaming || sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Send"}
-              </Button>
+              {isStreaming || sending || thinking ? (
+                <Button 
+                  type="button" 
+                  onClick={onStop} 
+                  size="sm" 
+                  variant="destructive"
+                  className="h-8 gap-1.5 px-4 font-medium"
+                >
+                  <Square className="h-3.5 w-3.5" />
+                  Stop
+                </Button>
+              ) : (
+                <Button type="submit" disabled={!canSend} size="sm" className="h-8 gap-1.5 px-4 font-medium">
+                  Send
+                </Button>
+              )}
             </div>
           </form>
         </div>

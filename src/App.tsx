@@ -542,6 +542,44 @@ function App() {
     setMessages([]);
   }, []);
 
+  const handleStopAssistant = useCallback(async () => {
+    try {
+      // Stop the API call by stopping the backend process
+      await invoke("stop_agent_message");
+      
+      // Update UI immediately
+      setThinking(false);
+      setMessages((current) =>
+        current.map((message) =>
+          message.streaming 
+            ? { ...message, streaming: false, content: message.content + " [Stopped]" }
+            : message
+        )
+      );
+      
+      // Restart the backend automatically
+      setBackendStatus("starting");
+      await invoke("start_backend", {
+        config: {
+          provider: settings.provider,
+          apiKey: settings.apiKey,
+          model: settings.model,
+          workdir: settings.workdir,
+          autoApproveReads: settings.autoApproveReads,
+          confirmWrites: settings.confirmWrites,
+          confirmShell: settings.confirmShell,
+          allowSystemWide: settings.allowSystemWide,
+        },
+      });
+      
+      console.log("Assistant stopped and backend restarted");
+    } catch (error) {
+      console.error("Failed to stop assistant:", error);
+      setBackendStatus("error");
+      setBackendStatusMessage("Failed to stop and restart backend");
+    }
+  }, [settings]);
+
   const resolveApproval = useCallback(
     async (request: ApprovalRequest, approved: boolean) => {
       console.log("=== resolveApproval called ===", { request, approved });
@@ -616,6 +654,7 @@ function App() {
           backendStatus={backendStatus}
           disabled={chatDisabled || assistantStreaming}
           onSend={handleSendMessage}
+          onStop={handleStopAssistant}
           onClear={handleClearChat}
           onToggleSettings={() => setSettingsPanelOpen((prev) => !prev)}
           settingsPanelOpen={settingsPanelOpen}

@@ -50,6 +50,15 @@ async fn send_agent_message(
 }
 
 #[tauri::command]
+async fn stop_agent_message(
+  state: tauri::State<'_, BackendState>,
+) -> Result<(), String> {
+  backend::stop_current_request(state)
+    .await
+    .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 async fn approve_tool(
   state: tauri::State<'_, BackendState>,
   request_id: String,
@@ -90,6 +99,7 @@ fn main() {
       start_backend,
       update_backend_config,
       send_agent_message,
+      stop_agent_message,
       approve_tool,
       kill_command,
       select_working_directory

@@ -113,6 +113,20 @@ impl BackendHandle {
       .await
   }
 
+  pub async fn stop_current_request(&self) -> Result<()> {
+    // Kill the current backend process to stop the API call
+    // This will terminate any ongoing OpenAI requests
+    {
+      let mut child = self.child.lock().await;
+      if let Err(err) = child.kill().await {
+        if err.kind() != std::io::ErrorKind::InvalidInput {
+          return Err(err.into());
+        }
+      }
+    }
+    Ok(())
+  }
+
   pub async fn shutdown(&self) -> Result<()> {
     self.shutdown.notify_waiters();
     {
@@ -496,6 +510,15 @@ pub async fn send_approval_command(
   };
 
   handle.send_approval(approval).await
+}
+
+pub async fn stop_current_request(
+  state: tauri::State<'_, BackendState>,
+) -> Result<()> {
+  let handle = state
+    .get()
+    .ok_or_else(|| anyhow!("Backend process is not running"))?;
+  handle.stop_current_request().await
 }
 
 pub async fn kill_session(
