@@ -147,11 +147,9 @@ function SettingsPanel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-black">
-      <div className="border-b border-border px-4 py-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium">Settings</h2>
-          {statusBadge}
-        </div>
+      <div className="flex items-center justify-between border-b border-border px-4 py-3 min-h-[53px]">
+        <h2 className="text-sm font-medium">Settings</h2>
+        {statusBadge}
       </div>
 
       <ScrollArea className="subtle-scrollbar flex-1 px-4 py-3">

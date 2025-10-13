@@ -169,7 +169,7 @@ function Chat({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex h-full flex-col bg-background">
-        <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+        <header className="flex items-center justify-between border-b border-border px-4 py-3 min-h-[53px]">
           <div className="flex items-center gap-3">
             <h1 className="text-sm font-semibold">DESK AI</h1>
             <span className="text-xs text-muted-foreground">
