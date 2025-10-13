@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal } from "lucide-react";
+import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown } from "lucide-react";
 
 import type { ApprovalRequest, BackendStatus, ChatMessage } from "../types";
 import { Button } from "./ui/button";
@@ -48,16 +48,60 @@ function Chat({
 }: ChatProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const listRef = useRef<HTMLDivElement>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
   const canSend = draft.trim().length > 0 && !disabled && backendStatus === "ready" && !sending;
   const isStreaming = useMemo(() => messages.some((message) => message.streaming), [messages]);
 
+  // Auto-scroll to bottom when messages change, but only if autoScroll is enabled
   useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+    if (!autoScroll) return;
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      console.log("No viewport ref found");
+      return;
+    }
+    console.log("Auto-scrolling to bottom");
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+  }, [messages, thinking, approvalRequest, autoScroll]);
+
+  // Check scroll position to show/hide scroll button and update autoScroll
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      console.log("No viewport for scroll listener");
+      return;
+    }
+
+    console.log("Setting up scroll listener on viewport", viewport);
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = viewport;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+      
+      console.log("Scroll detected:", { scrollTop, scrollHeight, clientHeight, isAtBottom });
+      
+      setShowScrollButton(!isAtBottom);
+      setAutoScroll(isAtBottom);
+    };
+
+    viewport.addEventListener('scroll', handleScroll);
+    handleScroll(); // Check initial state
+
+    return () => viewport.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Scroll to bottom function
+  const scrollToBottom = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+    setAutoScroll(true);
+    setShowScrollButton(false);
+  }, []);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -174,18 +218,36 @@ function Chat({
           </div>
         </header>
 
-        <ScrollArea className="subtle-scrollbar flex-1 px-6 py-4">
-          <div ref={listRef} className="flex flex-col gap-3">
-            {messages.length === 0 && !approvalRequest && !thinking && <EmptyState />}
-            {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))}
-            {thinking && <ThinkingBubble />}
-            {approvalRequest && (
-              <ApprovalBubble request={approvalRequest} onApprove={onApprove} onReject={onReject} />
-            )}
-          </div>
-        </ScrollArea>
+        <div className="relative flex-1 overflow-hidden">
+          <ScrollArea 
+            viewportRef={viewportRef}
+            className="subtle-scrollbar h-full px-6 py-4"
+          >
+            <div 
+              ref={listRef}
+              className="flex flex-col gap-3"
+            >
+              {messages.length === 0 && !approvalRequest && !thinking && <EmptyState />}
+              {messages.map((message) => (
+                <MessageBubble key={message.id} message={message} />
+              ))}
+              {thinking && <ThinkingBubble />}
+              {approvalRequest && (
+                <ApprovalBubble request={approvalRequest} onApprove={onApprove} onReject={onReject} />
+              )}
+            </div>
+          </ScrollArea>
+          
+          {showScrollButton && (
+            <Button
+              onClick={scrollToBottom}
+              size="sm"
+              className="absolute bottom-6 right-6 h-9 w-9 rounded-full p-0 shadow-lg z-10"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
 
         <div className="border-t border-border/40 bg-card/20 p-5">
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
