@@ -74,11 +74,11 @@ impl BackendHandle {
   async fn send_line<S: Serialize>(&self, payload: &S) -> Result<()> {
     let mut stdin = self.stdin.lock().await;
     let serialized = serde_json::to_string(payload)?;
-    eprintln!("[DEBUG] Writing to Python STDIN: {}", serialized);
+    eprintln!("[DEBUG] Writing to backend STDIN: {}", serialized);
     stdin.write_all(serialized.as_bytes()).await?;
     stdin.write_all(b"\n").await?;
     stdin.flush().await?;
-    eprintln!("[DEBUG] Successfully wrote and flushed to Python STDIN");
+    eprintln!("[DEBUG] Successfully wrote and flushed to backend STDIN");
     Ok(())
   }
 
@@ -97,7 +97,7 @@ impl BackendHandle {
   }
 
   pub async fn send_config(&self, config: &RuntimeConfig<'_>) -> Result<()> {
-    eprintln!("[DEBUG] Sending config to Python backend: {:?}", serde_json::to_string(config).unwrap());
+    eprintln!("[DEBUG] Sending config to backend: {:?}", serde_json::to_string(config).unwrap());
     self.send_line(config).await
   }
 
@@ -234,7 +234,6 @@ pub async fn start_backend(
   let mut command = Command::new(&script_path);
   command.current_dir(&workdir);
   command.kill_on_drop(true);
-  command.env("PYTHONUNBUFFERED", "1");
 
   // On Windows, prevent console window from appearing for the subprocess
   #[cfg(target_os = "windows")]
@@ -251,7 +250,7 @@ pub async fn start_backend(
     .stdout(std::process::Stdio::piped())
     .stderr(std::process::Stdio::piped())
     .spawn()
-    .context("Failed to spawn python backend process")?;
+    .context("Failed to spawn backend process")?;
 
   eprintln!("[DEBUG] Process spawned successfully");
 
@@ -323,7 +322,7 @@ pub async fn update_config(
 
   let handle = state
     .get()
-    .ok_or_else(|| anyhow!("Backend process is not running. Call start_python_backend first."))?;
+    .ok_or_else(|| anyhow!("Backend process is not running. Call start_backend first."))?;
 
   let workdir = config.workdir
     .canonicalize()
@@ -369,7 +368,7 @@ fn spawn_stdout_listener(
         line = lines.next_line() => {
           match line {
             Ok(Some(line)) => {
-              eprintln!("[DEBUG] Received from Python STDOUT: {}", line);
+              eprintln!("[DEBUG] Received from backend STDOUT: {}", line);
               if line.trim().is_empty() {
                 continue;
               }
@@ -393,11 +392,11 @@ fn spawn_stdout_listener(
               }
             }
             Ok(None) => {
-              eprintln!("[DEBUG] Python STDOUT closed");
+              eprintln!("[DEBUG] Backend STDOUT closed");
               break;
             }
             Err(err) => {
-              eprintln!("[DEBUG] Error reading Python STDOUT: {}", err);
+              eprintln!("[DEBUG] Error reading backend STDOUT: {}", err);
               let _ = app.emit_all(
                 "backend://error",
                 json!({ "message": "Failed reading backend output", "error": err.to_string() }),
@@ -420,13 +419,13 @@ fn spawn_stderr_listener(app: AppHandle, stderr: tokio::process::ChildStderr) ->
       if trimmed.is_empty() {
         continue;
       }
-      eprintln!("[DEBUG] Python STDERR: {}", trimmed);
+      eprintln!("[DEBUG] Backend STDERR: {}", trimmed);
       let _ = app.emit_all(
-        "backend://python_stderr",
+        "backend://stderr",
         json!({ "message": trimmed }),
       );
     }
-    eprintln!("[DEBUG] Python STDERR stream closed");
+    eprintln!("[DEBUG] Backend STDERR stream closed");
   })
 }
 

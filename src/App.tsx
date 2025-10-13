@@ -458,7 +458,7 @@ function App() {
         setBackendStatusMessage("Configuration updated");
       } else {
         // Backend not running, start it
-        await invoke("start_python_backend", {
+        await invoke("start_backend", {
           config: {
             provider: settings.provider,
             apiKey: settings.apiKey,

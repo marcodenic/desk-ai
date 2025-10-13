@@ -6,12 +6,12 @@ use backend::{BackendConfig, BackendState};
 use tauri::{api::dialog::FileDialogBuilder, Manager};
 
 #[tauri::command]
-async fn start_python_backend(
+async fn start_backend(
   app: tauri::AppHandle,
   state: tauri::State<'_, BackendState>,
   config: BackendConfig,
 ) -> Result<(), String> {
-  eprintln!("[COMMAND] start_python_backend called");
+  eprintln!("[COMMAND] start_backend called");
   eprintln!("[COMMAND] Config: {:?}", config);
   
   let result = backend::start_backend(app.clone(), state, config).await;
@@ -87,7 +87,7 @@ fn main() {
   tauri::Builder::default()
     .manage(BackendState::new())
     .invoke_handler(tauri::generate_handler![
-      start_python_backend,
+      start_backend,
       update_backend_config,
       send_agent_message,
       approve_tool,
