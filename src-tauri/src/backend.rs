@@ -15,9 +15,6 @@ use tokio::{
 };
 use uuid::Uuid;
 
-const PYTHON_BACKEND_RELATIVE: &str = "python/backend.py";
-const STANDALONE_BACKEND_NAME: &str = "desk-ai-backend";
-
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackendConfig {
@@ -33,7 +30,6 @@ pub struct BackendConfig {
   pub confirm_shell: bool,
   #[serde(default = "default_false")]
   pub allow_system_wide: bool,
-  pub python_path: Option<String>,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -198,7 +194,6 @@ pub async fn start_backend(
     confirm_writes,
     confirm_shell,
     allow_system_wide,
-    python_path,
   } = config;
 
   let workdir = workdir
@@ -236,25 +231,7 @@ pub async fn start_backend(
   eprintln!("[DEBUG] Backend path: {:?}", script_path);
   eprintln!("[DEBUG] Working dir: {:?}", workdir);
 
-  // Check if this is a standalone executable or needs Python
-  let is_standalone = script_path.extension().map_or(false, |ext| ext == "exe") 
-    || !script_path.extension().map_or(false, |ext| ext == "py");
-
-  let mut command = if is_standalone {
-    // Run standalone executable directly
-    eprintln!("[DEBUG] Using standalone executable");
-    Command::new(&script_path)
-  } else {
-    // Run Python script
-    eprintln!("[DEBUG] Using Python interpreter");
-    let python_path = resolve_python_executable(python_path.as_deref())
-      .context("Unable to locate a Python 3 executable")?;
-    eprintln!("[DEBUG] Python path: {:?}", python_path);
-    let mut cmd = Command::new(&python_path);
-    cmd.arg(&script_path);
-    cmd
-  };
-
+  let mut command = Command::new(&script_path);
   command.current_dir(&workdir);
   command.kill_on_drop(true);
   command.env("PYTHONUNBUFFERED", "1");
@@ -537,26 +514,9 @@ pub async fn shutdown_backend(state: tauri::State<'_, BackendState>) -> Result<(
   Ok(())
 }
 
-fn resolve_python_executable(custom: Option<&str>) -> Result<String> {
-  if let Some(path) = custom {
-    return Ok(path.to_string());
-  }
-
-  let candidates = ["python3", "python"];
-  for candidate in candidates {
-    if let Ok(path) = which::which(candidate) {
-      return Ok(path.to_string_lossy().to_string());
-    }
-  }
-
-  Err(anyhow!("Python executable not found. Make sure Python 3 is installed."))
-}
-
 fn resolve_backend_script(app: &AppHandle) -> Result<PathBuf> {
   eprintln!("[DEBUG] Starting backend resolution...");
   
-  // First try the standalone sidecar binary (Rust backend)
-  // Try various possible locations with platform-specific naming
   let target_triple = if cfg!(target_os = "windows") {
     "x86_64-pc-windows-msvc"
   } else if cfg!(target_os = "macos") {
@@ -572,17 +532,17 @@ fn resolve_backend_script(app: &AppHandle) -> Result<PathBuf> {
   let possible_paths = vec![
     format!("bin/desk-ai-backend-{}", target_triple),
     format!("bin/desk-ai-backend-{}.exe", target_triple),
-    format!("bin/{}", STANDALONE_BACKEND_NAME),
-    format!("bin/{}.exe", STANDALONE_BACKEND_NAME),
-    format!("{}", STANDALONE_BACKEND_NAME),
-    format!("{}.exe", STANDALONE_BACKEND_NAME),
+    "bin/desk-ai-backend".to_string(),
+    "bin/desk-ai-backend.exe".to_string(),
+    "desk-ai-backend".to_string(),
+    "desk-ai-backend.exe".to_string(),
   ];
   
   for path_str in possible_paths {
     if let Some(path) = app.path_resolver().resolve_resource(&path_str) {
       eprintln!("[DEBUG] Checking: {:?} -> {:?} (exists: {})", path_str, path, path.exists());
       if path.exists() {
-        eprintln!("[DEBUG] Found standalone backend sidecar: {:?}", path);
+        eprintln!("[DEBUG] Found backend sidecar: {:?}", path);
         return Ok(path);
       }
     } else {
@@ -590,32 +550,5 @@ fn resolve_backend_script(app: &AppHandle) -> Result<PathBuf> {
     }
   }
 
-  // Fall back to bundled Python script (for backward compatibility during transition)
-  if let Some(path) = app.path_resolver().resolve_resource(PYTHON_BACKEND_RELATIVE) {
-    eprintln!("[DEBUG] Checking Python script: {:?} (exists: {})", path, path.exists());
-    if path.exists() {
-      eprintln!("[DEBUG] Found backend script via resource resolver: {:?}", path);
-      return Ok(path);
-    }
-  } else {
-    eprintln!("[DEBUG] Could not resolve Python script resource: {:?}", PYTHON_BACKEND_RELATIVE);
-  }
-
-  // In development, try relative to current dir
-  let dev_path = std::env::current_dir()?.join(PYTHON_BACKEND_RELATIVE);
-  eprintln!("[DEBUG] Trying dev path from current_dir: {:?}", dev_path);
-  if dev_path.exists() {
-    return Ok(dev_path);
-  }
-
-  // Try one directory up (in case we're in src-tauri/)
-  let parent_dev_path = std::env::current_dir()?.join("..").join(PYTHON_BACKEND_RELATIVE);
-  eprintln!("[DEBUG] Trying dev path from parent: {:?}", parent_dev_path);
-  if parent_dev_path.exists() {
-    return Ok(parent_dev_path.canonicalize()?);
-  }
-
-  Err(anyhow!(
-    "Unable to locate backend. Tried sidecar, bundled resources, and dev paths."
-  ))
+  Err(anyhow!("Unable to locate Rust backend binary. Make sure it's built and copied to src-tauri/bin/"))
 }
