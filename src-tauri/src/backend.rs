@@ -3,6 +3,9 @@ use std::{path::PathBuf, sync::Arc};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 use anyhow::{anyhow, Context, Result};
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -238,7 +241,6 @@ pub async fn start_backend(
   // On Windows, prevent console window from appearing for the subprocess
   #[cfg(target_os = "windows")]
   {
-    use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     command.creation_flags(CREATE_NO_WINDOW);
   }
