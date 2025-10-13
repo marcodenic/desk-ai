@@ -104,25 +104,3 @@ jobs:
             All builds include the Rust backend with no Python dependencies required.
           releaseDraft: true
           prerelease: false
-
-  # Optional: Create checksums
-  checksums:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        
-      - name: Generate checksums
-        run: |
-          for file in */desk-ai*; do
-            if [ -f "$file" ]; then
-              sha256sum "$file" >> SHA256SUMS.txt
-            fi
-          done
-          
-      - name: Upload checksums
-        uses: actions/upload-artifact@v4
-        with:
-          name: checksums
-          path: SHA256SUMS.txt
