@@ -123,7 +123,11 @@ impl ToolExecutor {
         }
     }
 
-    async fn request_approval(&self, action: &str, args: &ToolCallArgs) -> Result<ApprovalResponse> {
+    async fn request_approval(
+        &self,
+        action: &str,
+        args: &ToolCallArgs,
+    ) -> Result<ApprovalResponse> {
         let request_id = Uuid::new_v4().to_string();
         let (tx, rx) = oneshot::channel();
 
@@ -134,7 +138,10 @@ impl ToolExecutor {
             .await
             .insert(request_id.clone(), tx);
 
-        eprintln!("[APPROVAL] Created approval request {} for {}", request_id, action);
+        eprintln!(
+            "[APPROVAL] Created approval request {} for {}",
+            request_id, action
+        );
 
         // Build approval details
         let mut details = HashMap::new();
@@ -148,7 +155,10 @@ impl ToolExecutor {
             );
         }
         if let Some(content) = &args.content {
-            details.insert("bytes".to_string(), serde_json::Value::Number(content.len().into()));
+            details.insert(
+                "bytes".to_string(),
+                serde_json::Value::Number(content.len().into()),
+            );
         }
 
         let action_map = match action {
@@ -173,7 +183,9 @@ impl ToolExecutor {
         eprintln!("[APPROVAL] Waiting for approval response...");
 
         // Wait for approval
-        let response = rx.await.map_err(|_| anyhow!("Approval request cancelled"))?;
+        let response = rx
+            .await
+            .map_err(|_| anyhow!("Approval request cancelled"))?;
 
         eprintln!("[APPROVAL] Got approval result: {:?}", response.approved);
 
@@ -215,8 +227,14 @@ impl ToolExecutor {
                 .spawn()?
         };
 
-        let stdout = child.stdout.take().ok_or_else(|| anyhow!("Failed to capture stdout"))?;
-        let stderr = child.stderr.take().ok_or_else(|| anyhow!("Failed to capture stderr"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow!("Failed to capture stdout"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| anyhow!("Failed to capture stderr"))?;
 
         let mut stdout_reader = BufReader::new(stdout).lines();
         let mut stderr_reader = BufReader::new(stderr).lines();
@@ -264,26 +282,26 @@ impl ToolExecutor {
         });
 
         // Wait for command to complete with timeout
-        let exit_code = match tokio::time::timeout(
-            std::time::Duration::from_secs(timeout),
-            child.wait(),
-        )
-        .await
-        {
-            Ok(Ok(status)) => status.code().unwrap_or(-1),
-            Ok(Err(e)) => {
-                eprintln!("[SHELL] Wait error: {}", e);
-                -1
-            }
-            Err(_) => {
-                // Timeout
-                let _ = child.kill().await;
-                self.bridge
-                    .emit_error(&format!("Command timed out after {}s: {}", timeout, command))
-                    .await;
-                -1
-            }
-        };
+        let exit_code =
+            match tokio::time::timeout(std::time::Duration::from_secs(timeout), child.wait()).await
+            {
+                Ok(Ok(status)) => status.code().unwrap_or(-1),
+                Ok(Err(e)) => {
+                    eprintln!("[SHELL] Wait error: {}", e);
+                    -1
+                }
+                Err(_) => {
+                    // Timeout
+                    let _ = child.kill().await;
+                    self.bridge
+                        .emit_error(&format!(
+                            "Command timed out after {}s: {}",
+                            timeout, command
+                        ))
+                        .await;
+                    -1
+                }
+            };
 
         // Wait for stream tasks to complete
         stdout_buffer = stdout_task.await.unwrap_or_default();
@@ -394,9 +412,7 @@ impl ToolExecutor {
         Ok(format!(
             "Wrote {} bytes to {}.",
             bytes_written,
-            path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("file")
+            path.file_name().and_then(|n| n.to_str()).unwrap_or("file")
         ))
     }
 
@@ -502,7 +518,10 @@ impl ToolExecutor {
         let max_results = args.max_results.unwrap_or(100);
 
         if !search_dir.exists() {
-            return Err(anyhow!("Directory does not exist: {}", search_dir.display()));
+            return Err(anyhow!(
+                "Directory does not exist: {}",
+                search_dir.display()
+            ));
         }
         if !search_dir.is_dir() {
             return Err(anyhow!("Path is not a directory: {}", search_dir.display()));
@@ -534,8 +553,10 @@ impl ToolExecutor {
             // Skip binary files
             if let Some(ext) = file_path.extension() {
                 let ext_str = ext.to_string_lossy();
-                if ["pyc", "so", "o", "a", "png", "jpg", "jpeg", "gif", "pdf", "zip", "tar", "gz"]
-                    .contains(&ext_str.as_ref())
+                if [
+                    "pyc", "so", "o", "a", "png", "jpg", "jpeg", "gif", "pdf", "zip", "tar", "gz",
+                ]
+                .contains(&ext_str.as_ref())
                 {
                     continue;
                 }
@@ -550,7 +571,12 @@ impl ToolExecutor {
                         let rel_path = file_path
                             .strip_prefix(&self.config.workdir)
                             .unwrap_or(&file_path);
-                        results.push(format!("{}:{}: {}", rel_path.display(), line_num + 1, line.trim()));
+                        results.push(format!(
+                            "{}:{}: {}",
+                            rel_path.display(),
+                            line_num + 1,
+                            line.trim()
+                        ));
 
                         if results.len() >= max_results {
                             break;
@@ -578,7 +604,10 @@ impl ToolExecutor {
             .await;
 
         if results.is_empty() {
-            return Ok(format!("No matches found for '{}' in {}", query, search_path_str));
+            return Ok(format!(
+                "No matches found for '{}' in {}",
+                query, search_path_str
+            ));
         }
 
         let result_text = format!(
@@ -595,7 +624,11 @@ impl ToolExecutor {
         Ok(result_text)
     }
 
-    async fn collect_files(&self, dir: &Path, file_pattern: Option<&String>) -> Result<Vec<PathBuf>> {
+    async fn collect_files(
+        &self,
+        dir: &Path,
+        file_pattern: Option<&String>,
+    ) -> Result<Vec<PathBuf>> {
         let mut files = Vec::new();
 
         if let Some(pattern) = file_pattern {
