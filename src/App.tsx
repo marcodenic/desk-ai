@@ -162,7 +162,7 @@ function App() {
       await register<BackendEvent>("backend://tool_log", handleToolLog);
       await register<ToolCallStartEvent>("backend://tool_call_start", handleToolCallStart);
       await register<ToolCallEndEvent>("backend://tool_call_end", handleToolCallEnd);
-      await register<BackendEvent>("backend://python_stderr", handlePythonStderr);
+      await register<BackendEvent>("backend://stderr", handleBackendStderr);
       await register<BackendEvent>("backend://exit", handleBackendExit);
     }
 
@@ -394,8 +394,8 @@ function App() {
     );
   }, []);
 
-  const handlePythonStderr = useCallback((payload: BackendEvent) => {
-    if (payload && typeof payload === "object" && "type" in payload && payload.type === "python_stderr") {
+  const handleBackendStderr = useCallback((payload: BackendEvent) => {
+    if (payload && typeof payload === "object" && "type" in payload && payload.type === "stderr") {
       setBackendStatusMessage(payload.message);
       console.warn("[backend stderr]", payload.message);
     }
@@ -404,7 +404,7 @@ function App() {
   const handleBackendExit = useCallback((payload: BackendEvent) => {
     if (payload && typeof payload === "object" && "type" in payload && payload.type === "exit") {
       setBackendStatus(payload.code === 0 ? "idle" : "error");
-      setBackendStatusMessage("Python backend exited.");
+      setBackendStatusMessage("Backend exited.");
     }
   }, []);
 

@@ -123,7 +123,7 @@ export type BackendEvent =
   | ToolCallStartEvent
   | ToolCallEndEvent
   | { type: "tool_log"; message: string; ts: string }
-  | { type: "python_stderr"; message: string }
+  | { type: "stderr"; message: string }
   | { type: "exit"; code: number | null; signal: number | null };
 
 export interface ApprovalRequest {

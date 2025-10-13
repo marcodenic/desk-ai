@@ -10,7 +10,6 @@ rust-backend/target
 *.log
 .env
 .venv
-__pycache__
 
 # Security: Prevent committing credentials and secrets
 *.key
@@ -26,13 +25,11 @@ credentials.*
 !.env.example
 
 # Security: Test files that might contain API keys
-test_*.py
-*_test.py
 test_*.js
 test_*.ts
 scratch.*
-debug_*.py
 debug_*.js
+debug_*.ts
 
 # Security: Local configuration files
 local.settings.json
