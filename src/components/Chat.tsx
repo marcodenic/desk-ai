@@ -161,7 +161,7 @@ function Chat({
   })();
 
   const placeholder = backendStatus === "ready"
-    ? "Ask the assistant for help…"
+    ? "Ask the assistant for help… (⌘⏎ / Ctrl⏎ to send)"
     : backendStatus === "starting"
       ? "Testing connection…"
       : "Configure settings to start.";
@@ -169,18 +169,28 @@ function Chat({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex h-full flex-col bg-background">
-        <header className="flex items-center justify-between border-b border-border px-4 py-3 min-h-[53px]">
+        <header className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border px-4 py-3 min-h-[53px]">
           <div className="flex items-center gap-3">
             <h1 className="text-sm font-semibold">DESK AI</h1>
             <span className="text-xs text-muted-foreground">
               super power your desktop
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-xs">
-              <div className="h-2 w-2 rounded-full bg-green-500" />
-              <span className="text-gray-400">Online</span>
-            </div>
+          <div className="flex items-center gap-1.5 text-xs">
+            <div className="h-2 w-2 rounded-full bg-green-500" />
+            <span className="text-gray-400">Online</span>
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleSettings}
+              className="h-7 w-7 p-0"
+            >
+              <Settings2 className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Switch
                 checked={autoApproveAll}
@@ -200,14 +210,6 @@ function Chat({
                 {allowSystemWide ? "System Wide" : "Workdir Only"}
               </label>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onToggleSettings}
-              className="h-7 w-7 p-0"
-            >
-              <Settings2 className="h-4 w-4" />
-            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -252,35 +254,41 @@ function Chat({
           )}
         </div>
 
-        <div className="border-t border-border/40 bg-card/20 p-5">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <div className="border-t border-border/40 bg-card/20 px-4 py-3">
+          <form onSubmit={handleSubmit} className="relative">
             <Textarea
               value={draft}
               placeholder={placeholder}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={handleKeyDown}
               disabled={backendStatus !== "ready" || disabled || sending}
-              className="min-h-[90px] resize-none border-border/50 bg-card/50 text-sm shadow-sm"
+              className="min-h-[44px] max-h-[30vh] resize-none border-border/50 bg-card/50 text-sm shadow-sm py-2.5 pr-12"
+              rows={1}
             />
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Press ⌘⏎ / Ctrl⏎ to send</span>
-              {isStreaming || sending || thinking ? (
-                <Button 
-                  type="button" 
-                  onClick={onStop} 
-                  size="sm" 
-                  variant="destructive"
-                  className="h-8 gap-1.5 px-4 font-medium"
-                >
-                  <Square className="h-3.5 w-3.5" />
-                  Stop
-                </Button>
-              ) : (
-                <Button type="submit" disabled={!canSend} size="sm" className="h-8 gap-1.5 px-4 font-medium">
-                  Send
-                </Button>
-              )}
-            </div>
+            {isStreaming || sending || thinking ? (
+              <Button 
+                type="button" 
+                onClick={onStop} 
+                size="sm" 
+                variant="destructive"
+                className="absolute right-2 bottom-2 h-8 w-8 p-0 shrink-0"
+              >
+                <Square className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button 
+                type="submit" 
+                disabled={!canSend} 
+                size="sm" 
+                className="absolute right-2 bottom-2 h-8 w-8 p-0 shrink-0"
+                style={{ backgroundColor: 'white', color: 'black' }}
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </Button>
+            )}
           </form>
         </div>
       </div>
@@ -370,7 +378,7 @@ function MessageBubble({ message }: MessageProps) {
         className={cn(
           "max-w-2xl rounded-lg border px-4 py-3 text-sm shadow-sm",
           isUser
-            ? "border-primary/30 bg-primary/8"
+            ? "border-white/20 bg-white text-black"
             : "border-border/50 bg-card/60"
         )}
       >
