@@ -169,9 +169,9 @@ function Chat({
       <div className="flex h-full flex-col bg-background">
         <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
           <div className="flex items-center gap-3">
-            <h1 className="text-sm font-semibold">Chat</h1>
+            <h1 className="text-sm font-semibold">DESK AI</h1>
             <span className="text-xs text-muted-foreground">
-              Ask the assistant to inspect files, edit code, or run shell commands
+              super power your desktop
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -185,16 +185,17 @@ function Chat({
                 onCheckedChange={onToggleAutoApprove}
               />
               <label className="text-xs cursor-pointer" onClick={onToggleAutoApprove}>
-                Auto Allow
+                {autoApproveAll ? "Auto Allow" : "Manual Approve"}
               </label>
             </div>
             <div className="flex items-center gap-2">
               <Switch
-                checked={!allowSystemWide}
+                checked={allowSystemWide}
                 onCheckedChange={() => onToggleSystemWide()}
+                disabled={backendStatus !== "ready"}
               />
               <label className="text-xs cursor-pointer" onClick={onToggleSystemWide}>
-                Workdir Only
+                {allowSystemWide ? "System Wide" : "Workdir Only"}
               </label>
             </div>
             <Button
@@ -317,13 +318,24 @@ function MessageBubble({ message }: MessageProps) {
         : message.toolStatus === "failed"
           ? "destructive"
           : "default";
+    
+    // Extract command from content like "Running: df -h"
+    const content = message.content;
+    const commandMatch = content.match(/^(Running|Reading file|Writing file|Listing directory|Deleting): (.+)$/);
+    
     return (
       <div className="flex items-center gap-2.5 py-1.5">
         <Badge variant={statusVariant} className="gap-1.5 text-xs font-mono">
           {message.toolName}
           <span className="opacity-60">{statusIcon}</span>
         </Badge>
-        <span className="text-xs text-muted-foreground">{message.content}</span>
+        {commandMatch ? (
+          <span className="text-xs text-muted-foreground">
+            {commandMatch[1]}: <code className="font-mono text-xs bg-muted/50 px-1 py-0.5 rounded">{commandMatch[2]}</code>
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">{content}</span>
+        )}
       </div>
     );
   }
