@@ -22,9 +22,6 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "resources": [
-        "../python/**/*"
-      ],
       "externalBin": [
         "bin/desk-ai-backend"
       ]
