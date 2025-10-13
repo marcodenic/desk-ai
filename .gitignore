@@ -5,6 +5,8 @@ build
 src-tauri/target
 src-tauri/debug
 src-tauri/release
+src-tauri/bin
+rust-backend/target
 *.log
 .env
 .venv

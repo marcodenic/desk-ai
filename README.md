@@ -9,6 +9,7 @@ Your personal AI-powered desktop assistant that can read files, execute commands
 Desk AI is a native desktop application that brings AI assistance directly to your computer. Unlike browser-based tools, Desk AI can actually interact with your files and system—reading code, running commands, searching directories, and automating tasks—all through natural conversation.
 
 Think of it as having an intelligent assistant that understands your system and can help with:
+
 - 🐛 **Debugging issues** by reading logs and analyzing error messages
 - 📁 **Managing files** across your projects with smart search and organization
 - ⚡ **Automating tasks** like batch operations, file cleanup, or report generation
@@ -36,6 +37,7 @@ Think of it as having an intelligent assistant that understands your system and 
 **Option A: Download Pre-built Release (Easiest)**
 
 Go to [Releases](https://github.com/marcodenic/desk-ai/releases) and download the installer for your platform:
+
 - **Windows**: `.msi` installer
 - **macOS**: `.dmg` or `.app` bundle
 - **Linux**: `.deb`, `.rpm`, or `.AppImage`
@@ -51,7 +53,11 @@ cd desk-ai
 
 # Install dependencies
 npm install
-pip install -r python/requirements.txt
+
+# Build the Rust backend (see BUILD.md for detailed instructions)
+cd rust-backend
+cargo build --release
+cd ..
 
 # Build the application
 npm run tauri:build
@@ -59,16 +65,20 @@ npm run tauri:build
 
 Find your installer in `src-tauri/target/release/bundle/`
 
+> **📖 For detailed build instructions**, see [BUILD.md](BUILD.md)
+
 ### 2. Get an API Key
 
 You'll need an API key from one of these providers:
 
-**OpenAI (GPT-4, GPT-4o, etc.)**
+**OpenAI (GPT-5, GPT-4o, etc.)**
+
 - Sign up at [platform.openai.com/signup](https://platform.openai.com/signup)
 - Go to [API Keys](https://platform.openai.com/api-keys) to create a new key
 - Recommended models: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`
 
 **Anthropic (Claude)**
+
 - Sign up at [console.anthropic.com](https://console.anthropic.com)
 - Go to [API Keys](https://console.anthropic.com/settings/keys) to create a new key
 - Recommended models: `claude-3-5-sonnet-latest`, `claude-3-5-haiku-latest`
@@ -88,25 +98,29 @@ You'll need an API key from one of these providers:
 ### 4. Start Using It!
 
 Try asking:
-- *"Show me all Python files in this directory"*
-- *"Find TODO comments in my code"*
-- *"What's using the most disk space?"*
-- *"Check if port 8080 is in use"*
-- *"Search all log files for errors from today"*
+
+- _"Show me all Python files in this directory"_
+- _"Find TODO comments in my code"_
+- _"What's using the most disk space?"_
+- _"Check if port 8080 is in use"_
+- _"Search all log files for errors from today"_
 
 ## 🔐 Security & Permissions
 
 **Workspace Mode (Default)**
+
 - All file operations restricted to your chosen directory
 - Prevents accidental changes outside your project
 - Great for isolated development work
 
 **System-Wide Mode**
+
 - Access files anywhere on your system
 - Toggle with the 🌍 button in the top-right
 - Still requires approval for destructive operations
 
 **Approval Controls**
+
 - ✓ Auto-approve file reads and listings
 - ✓ Confirm writes and deletions
 - ✓ Confirm shell commands
@@ -119,6 +133,7 @@ All API keys are stored locally on your computer and never sent anywhere except 
 ### Real-World Problems Desk AI Can Solve
 
 **System Troubleshooting**
+
 ```
 "My Bluetooth keeps disconnecting, help me debug it"
 "Why is my laptop running slow? Check resources"
@@ -127,6 +142,7 @@ All API keys are stored locally on your computer and never sent anywhere except 
 ```
 
 **File Management**
+
 ```
 "Find all files larger than 100MB"
 "Search for TODO comments in my Python files"
@@ -135,6 +151,7 @@ All API keys are stored locally on your computer and never sent anywhere except 
 ```
 
 **Code Analysis**
+
 ```
 "Read all the Python files and explain this project"
 "Find all API endpoints in this codebase"
@@ -143,6 +160,7 @@ All API keys are stored locally on your computer and never sent anywhere except 
 ```
 
 **Automation**
+
 ```
 "Rename all .txt files to .md in this directory"
 "Create a backup of all Python files"
@@ -155,28 +173,71 @@ All API keys are stored locally on your computer and never sent anywhere except 
 Want to contribute or build from source? Here's the technical overview:
 
 **Tech Stack**
-- Frontend: React 18 + TypeScript + Vite
-- Desktop: Tauri (Rust)
-- Backend: Python with asyncio
-- Communication: NDJSON over stdin/stdout
+
+- **Frontend**: React 18 + TypeScript + Vite
+- **Desktop**: Tauri (Rust)
+- **Backend**: Rust binary (desk-ai-backend)
+- **Communication**: NDJSON over stdin/stdout
+- **AI Providers**: OpenAI and Anthropic APIs
 
 **Project Structure**
+
 ```
 desk-ai/
-├── src/              # React frontend
-├── src-tauri/        # Rust/Tauri app
-├── python/           # Python AI backend
+├── src/              # React frontend (TypeScript)
+├── src-tauri/        # Tauri application (Rust)
+├── rust-backend/     # AI backend binary (Rust)
+│   ├── src/
+│   │   ├── main.rs         # Entry point
+│   │   ├── ndjson.rs       # Protocol layer
+│   │   ├── providers.rs    # OpenAI & Anthropic
+│   │   ├── tools.rs        # Tool implementations
+│   │   └── types.rs        # Type definitions
+│   └── Cargo.toml
 └── package.json      # Build scripts
 ```
 
+**Architecture**
+
+The application uses a sidecar architecture:
+
+1. **Tauri Frontend** (TypeScript/React) - User interface
+2. **NDJSON Bridge** - Bidirectional communication protocol
+3. **Rust Backend** (desk-ai-backend) - AI orchestration and tool execution
+4. **AI APIs** - OpenAI or Anthropic for language models
+
 **Development**
+
 ```bash
+# Install frontend dependencies
 npm install
-pip install -r python/requirements.txt
+
+# Build the Rust backend (required for full functionality)
+cd rust-backend
+cargo build --release
+cd ..
+
+# Run in development mode
 npm run tauri:dev
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+**Building from Source**
+
+For detailed build instructions including platform-specific requirements, see:
+- [BUILD.md](BUILD.md) - Comprehensive build guide
+- [REFACTOR.md](REFACTOR.md) - Architecture and implementation notes
+- [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - Complete feature documentation
+
+**Key Features**
+
+✨ **Rust Backend** (v0.1.0+):
+- Zero Python dependencies
+- Native performance
+- Smaller binary size
+- No Windows Defender false positives
+- Complete tool system with approval workflow
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ## � License
 
