@@ -1,4 +1,4 @@
-use crate::config::SYSTEM_PROMPT;
+use crate::config::get_system_prompt;
 use crate::ndjson::BridgeRef;
 use crate::tools::ToolExecutor;
 use crate::types::{BackendConfig, ToolCallArgs};
@@ -39,20 +39,62 @@ impl OpenAIProvider {
         let client = Client::with_config(openai_config);
 
         let tools = self.get_tool_definitions();
+        
+        // Start with system message
         let mut messages = vec![
             ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
                 content: async_openai::types::ChatCompletionRequestSystemMessageContent::Text(
-                    SYSTEM_PROMPT.to_string(),
-                ),
-                name: None,
-            }),
-            ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-                content: async_openai::types::ChatCompletionRequestUserMessageContent::Text(
-                    text.to_string(),
+                    get_system_prompt(),
                 ),
                 name: None,
             }),
         ];
+        
+        // Add conversation history (excluding the current user message)
+        let history = bridge.get_conversation_history().await;
+        let history_len = history.len();
+        
+        // Keep last N messages to avoid context length issues (e.g., last 20 messages = 10 exchanges)
+        let max_history_messages = 20;
+        let start_idx = if history_len > max_history_messages + 1 {
+            history_len - max_history_messages - 1 // -1 to exclude current user message
+        } else {
+            0
+        };
+        
+        for msg in &history[start_idx..history_len.saturating_sub(1)] {
+            match msg.role.as_str() {
+                "user" => {
+                    messages.push(ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
+                        content: async_openai::types::ChatCompletionRequestUserMessageContent::Text(
+                            msg.content.clone(),
+                        ),
+                        name: None,
+                    }));
+                }
+                "assistant" => {
+                    messages.push(ChatCompletionRequestMessage::Assistant(
+                        async_openai::types::ChatCompletionRequestAssistantMessage {
+                            content: Some(async_openai::types::ChatCompletionRequestAssistantMessageContent::Text(
+                                msg.content.clone(),
+                            )),
+                            name: None,
+                            tool_calls: None,
+                            ..Default::default()
+                        },
+                    ));
+                }
+                _ => {}
+            }
+        }
+        
+        // Add the current user message
+        messages.push(ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
+            content: async_openai::types::ChatCompletionRequestUserMessageContent::Text(
+                text.to_string(),
+            ),
+            name: None,
+        }));
 
         let mut aggregated_text = String::new();
         let max_iterations = 10;
@@ -304,10 +346,34 @@ impl AnthropicProvider {
         use futures::TryStreamExt;
 
         let tools = self.get_tool_definitions();
-        let mut messages = vec![json!({
+        
+        // Build messages from conversation history
+        let mut messages = Vec::new();
+        
+        // Get conversation history (excluding the current user message)
+        let history = bridge.get_conversation_history().await;
+        let history_len = history.len();
+        
+        // Keep last N messages to avoid context length issues
+        let max_history_messages = 20;
+        let start_idx = if history_len > max_history_messages + 1 {
+            history_len - max_history_messages - 1
+        } else {
+            0
+        };
+        
+        for msg in &history[start_idx..history_len.saturating_sub(1)] {
+            messages.push(json!({
+                "role": msg.role,
+                "content": msg.content
+            }));
+        }
+        
+        // Add current user message
+        messages.push(json!({
             "role": "user",
             "content": text
-        })];
+        }));
 
         let mut aggregated_text = String::new();
         let max_iterations = 10;
@@ -319,7 +385,7 @@ impl AnthropicProvider {
             let request_body = json!({
                 "model": self.model,
                 "max_tokens": 8192,
-                "system": SYSTEM_PROMPT,
+                "system": get_system_prompt(),
                 "messages": messages,
                 "tools": tools,
                 "stream": true
