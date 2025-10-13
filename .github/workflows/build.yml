@@ -16,15 +16,11 @@ jobs:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             
-          # macOS Intel
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            
           # macOS ARM (Apple Silicon)
           - os: macos-latest
             target: aarch64-apple-darwin
             
-          # Windows x86_64 (MSVC - no toolchain issues!)
+          # Windows x86_64 (MSVC)
           - os: windows-latest
             target: x86_64-pc-windows-msvc
 
@@ -100,7 +96,6 @@ jobs:
             
             This release includes builds for:
             - ✅ Windows x86_64 (MSVC)
-            - ✅ macOS Intel (x86_64)
             - ✅ macOS Apple Silicon (ARM64)
             - ✅ Linux x86_64
             
