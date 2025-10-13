@@ -22,6 +22,8 @@ pub struct NdjsonBridge {
     conversation_history: Arc<RwLock<Vec<ConversationMessage>>>,
 }
 
+const MAX_HISTORY_MESSAGES: usize = 5;
+
 impl NdjsonBridge {
     pub fn new() -> Self {
         Self {
@@ -33,7 +35,8 @@ impl NdjsonBridge {
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        self.emit_status("starting", "Awaiting configuration.").await;
+        self.emit_status("starting", "Awaiting configuration.")
+            .await;
 
         let stdin = std::io::stdin();
         let mut reader = stdin.lock();
@@ -120,10 +123,14 @@ impl NdjsonBridge {
         *self.active_prompt_id.write().await = Some(prompt_id.clone());
 
         // Add user message to conversation history
-        self.conversation_history.write().await.push(ConversationMessage {
-            role: "user".to_string(),
-            content: text.clone(),
-        });
+        Self::push_and_trim_history(
+            &self.conversation_history,
+            ConversationMessage {
+                role: "user".to_string(),
+                content: text.clone(),
+            },
+        )
+        .await;
 
         let config_guard = self.config.read().await;
         let config = config_guard
@@ -149,6 +156,18 @@ impl NdjsonBridge {
         Ok(())
     }
 
+    async fn push_and_trim_history(
+        history: &Arc<RwLock<Vec<ConversationMessage>>>,
+        message: ConversationMessage,
+    ) {
+        let mut history_guard = history.write().await;
+        history_guard.push(message);
+        if history_guard.len() > MAX_HISTORY_MESSAGES {
+            let excess = history_guard.len() - MAX_HISTORY_MESSAGES;
+            history_guard.drain(0..excess);
+        }
+    }
+
     async fn process_prompt(
         bridge: BridgeRef,
         config: BackendConfig,
@@ -158,11 +177,15 @@ impl NdjsonBridge {
         match config.provider {
             crate::types::Provider::OpenAI => {
                 let provider = OpenAIProvider::new(&config.api_key, &config.model);
-                provider.handle_prompt(&config, &bridge, &prompt_id, &text).await?;
+                provider
+                    .handle_prompt(&config, &bridge, &prompt_id, &text)
+                    .await?;
             }
             crate::types::Provider::Anthropic => {
                 let provider = AnthropicProvider::new(&config.api_key, &config.model);
-                provider.handle_prompt(&config, &bridge, &prompt_id, &text).await?;
+                provider
+                    .handle_prompt(&config, &bridge, &prompt_id, &text)
+                    .await?;
             }
         }
         Ok(())
@@ -179,7 +202,10 @@ impl NdjsonBridge {
         let sender = self.pending_approvals.write().await.remove(&request_id);
 
         if let Some(sender) = sender {
-            let response = ApprovalResponse { approved, overrides };
+            let response = ApprovalResponse {
+                approved,
+                overrides,
+            };
             let _ = sender.send(response);
             eprintln!("[APPROVAL] Sent approval response");
         } else {
@@ -240,18 +266,22 @@ impl BridgeRef {
 
     pub async fn emit_final(&self, prompt_id: &str, text: &str) {
         // Store assistant response in history
-        self.conversation_history.write().await.push(ConversationMessage {
-            role: "assistant".to_string(),
-            content: text.to_string(),
-        });
-        
+        NdjsonBridge::push_and_trim_history(
+            &self.conversation_history,
+            ConversationMessage {
+                role: "assistant".to_string(),
+                content: text.to_string(),
+            },
+        )
+        .await;
+
         self.emit_event(OutgoingEvent::Final {
             id: prompt_id.to_string(),
             text: text.to_string(),
         })
         .await;
     }
-    
+
     pub async fn get_conversation_history(&self) -> Vec<ConversationMessage> {
         self.conversation_history.read().await.clone()
     }

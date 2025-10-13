@@ -39,21 +39,21 @@ impl OpenAIProvider {
         let client = Client::with_config(openai_config);
 
         let tools = self.get_tool_definitions();
-        
+
         // Start with system message
-        let mut messages = vec![
-            ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
+        let mut messages = vec![ChatCompletionRequestMessage::System(
+            ChatCompletionRequestSystemMessage {
                 content: async_openai::types::ChatCompletionRequestSystemMessageContent::Text(
                     get_system_prompt(),
                 ),
                 name: None,
-            }),
-        ];
-        
+            },
+        )];
+
         // Add conversation history (excluding the current user message)
         let history = bridge.get_conversation_history().await;
         let history_len = history.len();
-        
+
         // Keep last N messages to avoid context length issues (e.g., last 20 messages = 10 exchanges)
         let max_history_messages = 20;
         let start_idx = if history_len > max_history_messages + 1 {
@@ -61,16 +61,19 @@ impl OpenAIProvider {
         } else {
             0
         };
-        
+
         for msg in &history[start_idx..history_len.saturating_sub(1)] {
             match msg.role.as_str() {
                 "user" => {
-                    messages.push(ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-                        content: async_openai::types::ChatCompletionRequestUserMessageContent::Text(
-                            msg.content.clone(),
-                        ),
-                        name: None,
-                    }));
+                    messages.push(ChatCompletionRequestMessage::User(
+                        ChatCompletionRequestUserMessage {
+                            content:
+                                async_openai::types::ChatCompletionRequestUserMessageContent::Text(
+                                    msg.content.clone(),
+                                ),
+                            name: None,
+                        },
+                    ));
                 }
                 "assistant" => {
                     messages.push(ChatCompletionRequestMessage::Assistant(
@@ -87,14 +90,16 @@ impl OpenAIProvider {
                 _ => {}
             }
         }
-        
+
         // Add the current user message
-        messages.push(ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-            content: async_openai::types::ChatCompletionRequestUserMessageContent::Text(
-                text.to_string(),
-            ),
-            name: None,
-        }));
+        messages.push(ChatCompletionRequestMessage::User(
+            ChatCompletionRequestUserMessage {
+                content: async_openai::types::ChatCompletionRequestUserMessageContent::Text(
+                    text.to_string(),
+                ),
+                name: None,
+            },
+        ));
 
         let mut aggregated_text = String::new();
         let max_iterations = 10;
@@ -134,7 +139,11 @@ impl OpenAIProvider {
                                         }
                                         current_tool_call = Some((
                                             id,
-                                            tc_delta.function.as_ref().and_then(|f| f.name.clone()).unwrap_or_default(),
+                                            tc_delta
+                                                .function
+                                                .as_ref()
+                                                .and_then(|f| f.name.clone())
+                                                .unwrap_or_default(),
                                             String::new(),
                                         ));
                                     }
@@ -168,7 +177,11 @@ impl OpenAIProvider {
                 break;
             }
 
-            eprintln!("[OPENAI] Iteration {} has {} tool calls", iteration + 1, tool_calls.len());
+            eprintln!(
+                "[OPENAI] Iteration {} has {} tool calls",
+                iteration + 1,
+                tool_calls.len()
+            );
 
             // Execute tool calls
             let executor = ToolExecutor::new(config.clone(), bridge.clone());
@@ -189,14 +202,16 @@ impl OpenAIProvider {
                     async_openai::types::ChatCompletionRequestAssistantMessage {
                         content: None,
                         name: None,
-                        tool_calls: Some(vec![async_openai::types::ChatCompletionMessageToolCall {
-                            id: call_id.clone(),
-                            r#type: ChatCompletionToolType::Function,
-                            function: async_openai::types::FunctionCall {
-                                name: name.clone(),
-                                arguments: args_str.clone(),
+                        tool_calls: Some(vec![
+                            async_openai::types::ChatCompletionMessageToolCall {
+                                id: call_id.clone(),
+                                r#type: ChatCompletionToolType::Function,
+                                function: async_openai::types::FunctionCall {
+                                    name: name.clone(),
+                                    arguments: args_str.clone(),
+                                },
                             },
-                        }]),
+                        ]),
                         ..Default::default()
                     },
                 ));
@@ -223,7 +238,9 @@ impl OpenAIProvider {
                 r#type: ChatCompletionToolType::Function,
                 function: async_openai::types::FunctionObject {
                     name: "run_shell".to_string(),
-                    description: Some("Run a shell command in the workspace. Use cautiously.".to_string()),
+                    description: Some(
+                        "Run a shell command in the workspace. Use cautiously.".to_string(),
+                    ),
                     parameters: Some(json!({
                         "type": "object",
                         "properties": {
@@ -239,7 +256,9 @@ impl OpenAIProvider {
                 r#type: ChatCompletionToolType::Function,
                 function: async_openai::types::FunctionObject {
                     name: "read_file".to_string(),
-                    description: Some("Read text content from a file inside the workspace.".to_string()),
+                    description: Some(
+                        "Read text content from a file inside the workspace.".to_string(),
+                    ),
                     parameters: Some(json!({
                         "type": "object",
                         "properties": {
@@ -255,7 +274,10 @@ impl OpenAIProvider {
                 r#type: ChatCompletionToolType::Function,
                 function: async_openai::types::FunctionObject {
                     name: "write_file".to_string(),
-                    description: Some("Write text to a file inside the workspace, replacing existing content.".to_string()),
+                    description: Some(
+                        "Write text to a file inside the workspace, replacing existing content."
+                            .to_string(),
+                    ),
                     parameters: Some(json!({
                         "type": "object",
                         "properties": {
@@ -271,7 +293,9 @@ impl OpenAIProvider {
                 r#type: ChatCompletionToolType::Function,
                 function: async_openai::types::FunctionObject {
                     name: "list_directory".to_string(),
-                    description: Some("List files and directories relative to the workspace.".to_string()),
+                    description: Some(
+                        "List files and directories relative to the workspace.".to_string(),
+                    ),
                     parameters: Some(json!({
                         "type": "object",
                         "properties": {
@@ -286,7 +310,9 @@ impl OpenAIProvider {
                 r#type: ChatCompletionToolType::Function,
                 function: async_openai::types::FunctionObject {
                     name: "delete_path".to_string(),
-                    description: Some("Delete a file or directory inside the workspace.".to_string()),
+                    description: Some(
+                        "Delete a file or directory inside the workspace.".to_string(),
+                    ),
                     parameters: Some(json!({
                         "type": "object",
                         "properties": {
@@ -302,7 +328,10 @@ impl OpenAIProvider {
                 r#type: ChatCompletionToolType::Function,
                 function: async_openai::types::FunctionObject {
                     name: "search_files".to_string(),
-                    description: Some("Search for text content across multiple files in the workspace.".to_string()),
+                    description: Some(
+                        "Search for text content across multiple files in the workspace."
+                            .to_string(),
+                    ),
                     parameters: Some(json!({
                         "type": "object",
                         "properties": {
@@ -346,14 +375,14 @@ impl AnthropicProvider {
         use futures::TryStreamExt;
 
         let tools = self.get_tool_definitions();
-        
+
         // Build messages from conversation history
         let mut messages = Vec::new();
-        
+
         // Get conversation history (excluding the current user message)
         let history = bridge.get_conversation_history().await;
         let history_len = history.len();
-        
+
         // Keep last N messages to avoid context length issues
         let max_history_messages = 20;
         let start_idx = if history_len > max_history_messages + 1 {
@@ -361,14 +390,14 @@ impl AnthropicProvider {
         } else {
             0
         };
-        
+
         for msg in &history[start_idx..history_len.saturating_sub(1)] {
             messages.push(json!({
                 "role": msg.role,
                 "content": msg.content
             }));
         }
-        
+
         // Add current user message
         messages.push(json!({
             "role": "user",
@@ -410,10 +439,20 @@ impl AnthropicProvider {
                 if event.event == "content_block_start" {
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(&event.data) {
                         if let Some(content_block) = data.get("content_block") {
-                            if content_block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                            if content_block.get("type").and_then(|t| t.as_str())
+                                == Some("tool_use")
+                            {
                                 current_tool_use = Some((
-                                    content_block.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string(),
-                                    content_block.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string(),
+                                    content_block
+                                        .get("id")
+                                        .and_then(|i| i.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    content_block
+                                        .get("name")
+                                        .and_then(|n| n.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
                                     String::new(),
                                 ));
                             }
@@ -423,12 +462,17 @@ impl AnthropicProvider {
                     if let Ok(data) = serde_json::from_str::<serde_json::Value>(&event.data) {
                         if let Some(delta) = data.get("delta") {
                             if delta.get("type").and_then(|t| t.as_str()) == Some("text_delta") {
-                                if let Some(text_delta) = delta.get("text").and_then(|t| t.as_str()) {
+                                if let Some(text_delta) = delta.get("text").and_then(|t| t.as_str())
+                                {
                                     current_text.push_str(text_delta);
                                     bridge.emit_token(prompt_id, text_delta).await;
                                 }
-                            } else if delta.get("type").and_then(|t| t.as_str()) == Some("input_json_delta") {
-                                if let Some(json_delta) = delta.get("partial_json").and_then(|j| j.as_str()) {
+                            } else if delta.get("type").and_then(|t| t.as_str())
+                                == Some("input_json_delta")
+                            {
+                                if let Some(json_delta) =
+                                    delta.get("partial_json").and_then(|j| j.as_str())
+                                {
                                     if let Some((_, _, input_json)) = current_tool_use.as_mut() {
                                         input_json.push_str(json_delta);
                                     }
@@ -438,7 +482,8 @@ impl AnthropicProvider {
                     }
                 } else if event.event == "content_block_stop" {
                     if let Some((id, name, input_json)) = current_tool_use.take() {
-                        let input: serde_json::Value = serde_json::from_str(&input_json).unwrap_or(json!({}));
+                        let input: serde_json::Value =
+                            serde_json::from_str(&input_json).unwrap_or(json!({}));
                         tool_uses.push((id, name, input));
                     }
                 } else if event.event == "message_stop" {

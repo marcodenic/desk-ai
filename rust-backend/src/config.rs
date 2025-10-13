@@ -5,15 +5,15 @@ pub fn validate_config(config: &BackendConfig) -> Result<()> {
     if config.api_key.trim().is_empty() {
         return Err(anyhow!("API key must not be empty"));
     }
-    
+
     if !config.workdir.exists() {
         return Err(anyhow!("Working directory must exist"));
     }
-    
+
     if !config.workdir.is_dir() {
         return Err(anyhow!("Working directory must be a directory"));
     }
-    
+
     Ok(())
 }
 

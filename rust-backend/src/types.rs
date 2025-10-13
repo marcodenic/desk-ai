@@ -139,22 +139,22 @@ pub struct ToolCallArgs {
     // Common fields
     pub path: Option<String>,
     pub command: Option<String>,
-    
+
     // run_shell
     pub timeout: Option<u64>,
-    
+
     // read_file
     pub max_bytes: Option<usize>,
-    
+
     // write_file
     pub content: Option<String>,
-    
+
     // list_directory
     pub pattern: Option<String>,
-    
+
     // delete_path
     pub recursive: Option<bool>,
-    
+
     // search_files
     pub query: Option<String>,
     pub file_pattern: Option<String>,

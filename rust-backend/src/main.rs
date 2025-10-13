@@ -10,9 +10,9 @@ use ndjson::NdjsonBridge;
 #[tokio::main]
 async fn main() -> Result<()> {
     eprintln!("[RUST BACKEND] Starting desk-ai-backend");
-    
+
     let mut bridge = NdjsonBridge::new();
     bridge.run().await?;
-    
+
     Ok(())
 }
