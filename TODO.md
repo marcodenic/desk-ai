@@ -1,0 +1,3 @@
+Issues I would like to fix:
+
+- I would like to have some way for users to allow the AI to handle commands that require auth like... sudo commands or something? previously when we had the python back end, I could kind of cheat by entering my password into the sudo request in the python terminal output, but for desktop users who install the app, that wont be an option, so.. how do we address that? can we pop up a request for the user to approve or something? how does it work on windows or mac?

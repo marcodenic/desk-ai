@@ -1,5 +1,14 @@
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal } from "lucide-react";
+
 import type { ApprovalRequest, BackendStatus, ChatMessage } from "../types";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Badge, type BadgeProps } from "./ui/badge";
+import { ScrollArea } from "./ui/scroll-area";
+import { Textarea } from "./ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { cn } from "../lib/utils";
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -19,7 +28,23 @@ interface ChatProps {
   onToggleSystemWide: () => void;
 }
 
-function Chat({ messages, thinking, backendStatus, disabled, onSend, onClear, onToggleSettings, settingsPanelOpen, approvalRequest, onApprove, onReject, autoApproveAll, onToggleAutoApprove, allowSystemWide, onToggleSystemWide }: ChatProps) {
+function Chat({
+  messages,
+  thinking,
+  backendStatus,
+  disabled,
+  onSend,
+  onClear,
+  onToggleSettings,
+  settingsPanelOpen,
+  approvalRequest,
+  onApprove,
+  onReject,
+  autoApproveAll,
+  onToggleAutoApprove,
+  allowSystemWide,
+  onToggleSystemWide,
+}: ChatProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -28,14 +53,13 @@ function Chat({ messages, thinking, backendStatus, disabled, onSend, onClear, on
   const isStreaming = useMemo(() => messages.some((message) => message.streaming), [messages]);
 
   useEffect(() => {
-    const element = listRef.current;
-    if (!element) return;
-
-    element.scrollTop = element.scrollHeight;
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   const handleSubmit = useCallback(
-    async (event: FormEvent) => {
+    async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       await sendDraft();
     },
@@ -64,95 +88,168 @@ function Chat({ messages, thinking, backendStatus, disabled, onSend, onClear, on
     }
   }, [draft, canSend, onSend]);
 
+  const statusBadge = (() => {
+    switch (backendStatus) {
+      case "ready":
+        return (
+          <Badge variant="success" className="gap-1">
+            <Bolt className="h-4 w-4" /> Online
+          </Badge>
+        );
+      case "starting":
+        return (
+          <Badge variant="warning" className="gap-1">
+            <Loader2 className="h-4 w-4 animate-spin" /> Connecting
+          </Badge>
+        );
+      case "error":
+        return (
+          <Badge variant="destructive" className="gap-1">
+            <ShieldAlert className="h-4 w-4" /> Error
+          </Badge>
+        );
+      default:
+        return <Badge variant="outline">Idle</Badge>;
+    }
+  })();
+
+  const placeholder = backendStatus === "ready"
+    ? "Ask the assistant for help…"
+    : backendStatus === "starting"
+      ? "Testing connection…"
+      : "Configure settings to start.";
+
   return (
-    <section className="chat-panel">
-      <div className="chat-header">
-        <div>
-          <h2>Chat</h2>
-          <p className="chat-description">
-            Ask the assistant to inspect files, edit code, or run shell commands in your working directory.
-          </p>
-        </div>
-        <div className="chat-actions">
-          <button 
-            className={autoApproveAll ? "primary" : "secondary"}
-            onClick={onToggleAutoApprove}
-            title={autoApproveAll ? "Auto-approve is ON" : "Auto-approve is OFF"}
-            style={{ marginRight: '8px' }}
-          >
-            {autoApproveAll ? "🔓 Auto Allow ON" : "🔒 Auto Allow OFF"}
-          </button>
-          <button 
-            className={allowSystemWide ? "primary" : "secondary"}
-            onClick={onToggleSystemWide}
-            title={allowSystemWide ? "System-wide access enabled (can access any file)" : "Restricted to working directory only"}
-            style={{ marginRight: '8px' }}
-          >
-            {allowSystemWide ? "🌍 System-Wide" : "📁 Workdir Only"}
-          </button>
-          <button 
-            className="secondary" 
-            onClick={onToggleSettings}
-            title={settingsPanelOpen ? "Hide settings" : "Show settings"}
-            style={{ marginRight: '8px' }}
-          >
-            {settingsPanelOpen ? "⚙️ Hide Settings" : "⚙️ Settings"}
-          </button>
-          <button className="secondary" onClick={onClear} disabled={messages.length === 0}>
-            Clear Chat
-          </button>
+    <TooltipProvider delayDuration={200}>
+      <div className="flex h-full flex-col bg-background">
+        <header className="flex items-center justify-between border-b border-border/40 bg-card/30 px-5 py-3.5">
+          <div className="flex items-center gap-3">
+            <h1 className="text-base font-semibold tracking-tight">Chat</h1>
+            <span className="text-xs text-muted-foreground">
+              Ask the assistant to inspect files, edit code, or run shell commands
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {statusBadge}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={autoApproveAll ? "default" : "outline"}
+                  size="sm"
+                  onClick={onToggleAutoApprove}
+                  className="h-8 gap-1.5 text-xs font-medium"
+                >
+                  {autoApproveAll ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
+                  Auto Allow
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{autoApproveAll ? "Auto-approve enabled" : "Require approval"}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={allowSystemWide ? "default" : "outline"}
+                  size="sm"
+                  onClick={onToggleSystemWide}
+                  className="h-8 gap-1.5 text-xs font-medium"
+                >
+                  {allowSystemWide ? <Globe2 className="h-3.5 w-3.5" /> : "📁"}
+                  {allowSystemWide ? "Workdir Only" : "Workdir Only"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{allowSystemWide ? "System-wide" : "Workdir only"}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={settingsPanelOpen ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={onToggleSettings}
+                  className="h-8 gap-1 text-xs"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Toggle settings</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onClear}
+                  disabled={messages.length === 0}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Clear Chat
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Clear history</TooltipContent>
+            </Tooltip>
+          </div>
+        </header>
+
+        <ScrollArea className="subtle-scrollbar flex-1 px-6 py-4">
+          <div ref={listRef} className="flex flex-col gap-3">
+            {messages.length === 0 && !approvalRequest && !thinking && <EmptyState />}
+            {messages.map((message) => (
+              <MessageBubble key={message.id} message={message} />
+            ))}
+            {thinking && <ThinkingBubble />}
+            {approvalRequest && (
+              <ApprovalBubble request={approvalRequest} onApprove={onApprove} onReject={onReject} />
+            )}
+          </div>
+        </ScrollArea>
+
+        <div className="border-t border-border/40 bg-card/20 p-5">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <Textarea
+              value={draft}
+              placeholder={placeholder}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={backendStatus !== "ready" || disabled || sending}
+              className="min-h-[90px] resize-none border-border/50 bg-card/50 text-sm shadow-sm"
+            />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Press ⌘⏎ / Ctrl⏎ to send</span>
+              <Button type="submit" disabled={!canSend} size="sm" className="h-8 gap-1.5 px-4 font-medium">
+                {isStreaming || sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Send"}
+              </Button>
+            </div>
+          </form>
         </div>
       </div>
+    </TooltipProvider>
+  );
+}
 
-      <div className="message-list" ref={listRef}>
-        {messages.length === 0 && (
-          <div className="empty-state">
-            <p>Start a conversation to let the AI explore your project.</p>
-          </div>
-        )}
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
-        ))}
-        {thinking && (
-          <div className="message assistant thinking">
-            <div className="message-meta">
-              <span className="message-label">Assistant</span>
-            </div>
-            <div className="message-body">
-              <div className="thinking-indicator">
-                <span className="dot"></span>
-                <span className="dot"></span>
-                <span className="dot"></span>
-              </div>
-            </div>
-          </div>
-        )}
-        {approvalRequest && (
-          <ApprovalBubble 
-            request={approvalRequest}
-            onApprove={onApprove}
-            onReject={onReject}
-          />
-        )}
-      </div>
+interface ControlButtonProps {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  tooltip: string;
+  label: string;
+}
 
-      <form className="composer" onSubmit={handleSubmit}>
-        <textarea
-          value={draft}
-          placeholder={backendStatus === "ready" ? "Ask the assistant for help…" : backendStatus === "starting" ? "Testing connection…" : "Configure settings to start."}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={backendStatus !== "ready" || disabled || sending}
-          rows={3}
-        />
-        <div className="composer-footer">
-          <span className="hint">Press ⌘⏎ / Ctrl⏎ to send</span>
-          <button className="primary" type="submit" disabled={!canSend}>
-            {isStreaming ? "Streaming…" : sending ? "Sending…" : "Send"}
-          </button>
-        </div>
-      </form>
-    </section>
+function ControlButton({ active, onClick, icon: Icon, tooltip, label }: ControlButtonProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={active ? "default" : "outline"}
+          size="sm"
+          onClick={onClick}
+          className={cn("gap-1", active ? "shadow-lg shadow-primary/30" : "")}
+        >
+          <Icon className="h-4 w-4" />
+          {label}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -163,31 +260,60 @@ interface MessageProps {
 function MessageBubble({ message }: MessageProps) {
   const isUser = message.role === "user";
   const isTool = message.role === "tool";
-  const label = isUser ? "You" : isTool ? "Tool" : "Assistant";
+  const timestamp = new Date(message.createdAt).toLocaleTimeString();
 
   if (isTool) {
+    const statusIcon =
+      message.toolStatus === "executing" ? "●" : message.toolStatus === "completed" ? "✔" : "✖";
+    const statusVariant: BadgeProps["variant"] =
+      message.toolStatus === "completed"
+        ? "success"
+        : message.toolStatus === "failed"
+          ? "destructive"
+          : "default";
     return (
-      <div className="message tool">
-        <div className="tool-call-chip">
-          <span className="tool-icon">
-            {message.toolStatus === "executing" ? "⚙️" : message.toolStatus === "completed" ? "✓" : "✗"}
-          </span>
-          <span className="tool-name">{message.toolName}</span>
-          <span className="tool-description">{message.content}</span>
-        </div>
+      <div className="flex items-center gap-2.5 py-1.5">
+        <Badge variant={statusVariant} className="gap-1.5 text-xs font-mono">
+          {message.toolName}
+          <span className="opacity-60">{statusIcon}</span>
+        </Badge>
+        <span className="text-xs text-muted-foreground">{message.content}</span>
       </div>
     );
   }
 
   return (
-    <div className={`message ${isUser ? "user" : "assistant"}`}>
-      <div className="message-meta">
-        <span className="message-label">{label}</span>
-        <span className="message-time">{new Date(message.createdAt).toLocaleTimeString()}</span>
+    <div
+      className={cn(
+        "group flex flex-col gap-1.5 py-1",
+        isUser ? "items-end" : "items-start"
+      )}
+    >
+      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+        <span>{isUser ? "You" : "Assistant"}</span>
+        <span className="opacity-50">{timestamp}</span>
       </div>
-      <div className="message-body">
-        <pre>{message.content || (message.streaming ? "…" : "")}</pre>
+      <div
+        className={cn(
+          "max-w-2xl rounded-lg border px-4 py-3 text-sm shadow-sm",
+          isUser
+            ? "border-primary/30 bg-primary/8"
+            : "border-border/50 bg-card/60"
+        )}
+      >
+        <pre className="whitespace-pre-wrap font-sans leading-relaxed">
+          {message.content || (message.streaming ? "…" : "")}
+        </pre>
       </div>
+    </div>
+  );
+}
+
+function ThinkingBubble() {
+  return (
+    <div className="flex items-center gap-2.5 py-2">
+      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+      <span className="text-sm text-muted-foreground">Thinking…</span>
     </div>
   );
 }
@@ -199,56 +325,51 @@ interface ApprovalBubbleProps {
 }
 
 function ApprovalBubble({ request, onApprove, onReject }: ApprovalBubbleProps) {
-  const handleApprove = (e: React.MouseEvent) => {
-    console.log("=== APPROVE CLICKED ===");
-    console.log("Event:", e);
-    console.log("Request:", request);
-    e.preventDefault();
-    e.stopPropagation();
-    onApprove();
-  };
-
-  const handleReject = (e: React.MouseEvent) => {
-    console.log("=== REJECT CLICKED ===");
-    console.log("Event:", e);
-    console.log("Request:", request);
-    e.preventDefault();
-    e.stopPropagation();
-    onReject();
-  };
-
   return (
-    <div className="message approval">
-      <div className="message-meta">
-        <span className="message-label">⚠️ Approval Required</span>
+    <div className="my-2 flex flex-col gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 shadow-sm">
+      <div className="flex items-center gap-2 text-sm font-semibold text-amber-200">
+        <ShieldAlert className="h-4 w-4" />
+        Approval required
       </div>
-      <div className="message-body">
-        <div className="approval-content">
-          <p><strong>{formatAction(request.action)}</strong></p>
-          {request.command && <code>{request.command}</code>}
-          {request.path && <code>{request.path}</code>}
-          {request.description && <p className="approval-description">{request.description}</p>}
-        </div>
-        <div className="approval-actions">
-          <button 
-            className="secondary small" 
-            onClick={handleReject}
-            onMouseDown={(e) => console.log("Deny mousedown", e)}
-            onMouseUp={(e) => console.log("Deny mouseup", e)}
-            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-          >
-            Deny
-          </button>
-          <button 
-            className="primary small" 
-            onClick={handleApprove}
-            onMouseDown={(e) => console.log("Allow mousedown", e)}
-            onMouseUp={(e) => console.log("Allow mouseup", e)}
-            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-          >
-            Allow
-          </button>
-        </div>
+      <div className="space-y-2">
+        <p className="text-sm font-medium">{formatAction(request.action)}</p>
+        {request.command && (
+          <code className="block rounded-md border border-amber-500/20 bg-black/20 px-3 py-2 text-xs font-mono">
+            {request.command}
+          </code>
+        )}
+        {request.path && (
+          <code className="block rounded-md border border-amber-500/20 bg-black/20 px-3 py-2 text-xs font-mono">
+            {request.path}
+          </code>
+        )}
+        {request.description && (
+          <p className="text-xs text-muted-foreground">{request.description}</p>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Button variant="ghost" size="sm" onClick={onReject} className="h-8 text-xs font-medium">
+          Deny
+        </Button>
+        <Button size="sm" onClick={onApprove} className="h-8 bg-amber-500 text-black hover:bg-amber-400 font-medium">
+          Allow
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+      <div className="rounded-full bg-primary/10 p-4 shadow-lg shadow-primary/10">
+        <Bolt className="h-6 w-6 text-primary" />
+      </div>
+      <div className="space-y-1.5">
+        <p className="text-base font-semibold">Start a conversation</p>
+        <p className="text-sm text-muted-foreground">
+          Let the assistant explore your project and automate workflows.
+        </p>
       </div>
     </div>
   );

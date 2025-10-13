@@ -3,7 +3,6 @@ import { invoke } from "@tauri-apps/api/tauri";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import SettingsPanel from "./components/SettingsPanel";
 import Chat from "./components/Chat";
-import TerminalPane from "./components/TerminalPane";
 import type {
   ApprovalRequest,
   BackendEvent,
@@ -19,6 +18,8 @@ import type {
   ToolCallStartEvent,
   ToolCallEndEvent,
 } from "./types";
+import { Button } from "./components/ui/button";
+import { cn } from "./lib/utils";
 
 const DEFAULT_SETTINGS: Settings = {
   provider: "openai",
@@ -594,9 +595,9 @@ function App() {
   );
 
   return (
-    <div className="app-container">
-      <div className="workspace">
-        {settingsPanelOpen && (
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-background lg:flex-row">
+      {settingsPanelOpen && (
+        <div className="w-full border-b border-border/40 lg:w-72 lg:border-b-0 lg:border-r">
           <SettingsPanel
             settings={settings}
             backendStatus={backendStatus}
@@ -606,7 +607,9 @@ function App() {
             onSave={handleSaveSettings}
             onSelectDirectory={handleSelectDirectory}
           />
-        )}
+        </div>
+      )}
+      <div className="flex flex-1 flex-col overflow-hidden">
         <Chat
           messages={messages}
           thinking={thinking}
@@ -620,12 +623,15 @@ function App() {
           onApprove={handleApproveFromChat}
           onReject={handleRejectFromChat}
           autoApproveAll={settings.autoApproveAll}
-          onToggleAutoApprove={() => setSettings((prev) => ({ ...prev, autoApproveAll: !prev.autoApproveAll }))}
+          onToggleAutoApprove={() =>
+            setSettings((prev) => ({ ...prev, autoApproveAll: !prev.autoApproveAll }))
+          }
           allowSystemWide={settings.allowSystemWide}
-          onToggleSystemWide={() => setSettings((prev) => ({ ...prev, allowSystemWide: !prev.allowSystemWide }))}
+          onToggleSystemWide={() =>
+            setSettings((prev) => ({ ...prev, allowSystemWide: !prev.allowSystemWide }))
+          }
         />
       </div>
-      {/* Terminal panel removed - commands shown inline in chat */}
     </div>
   );
 }
