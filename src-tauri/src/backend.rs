@@ -555,9 +555,23 @@ fn resolve_python_executable(custom: Option<&str>) -> Result<String> {
 fn resolve_backend_script(app: &AppHandle) -> Result<PathBuf> {
   eprintln!("[DEBUG] Starting backend resolution...");
   
-  // First try the standalone sidecar binary (for production builds)
-  // Try various possible locations
+  // First try the standalone sidecar binary (Rust backend)
+  // Try various possible locations with platform-specific naming
+  let target_triple = if cfg!(target_os = "windows") {
+    "x86_64-pc-windows-msvc"
+  } else if cfg!(target_os = "macos") {
+    if cfg!(target_arch = "aarch64") {
+      "aarch64-apple-darwin"
+    } else {
+      "x86_64-apple-darwin"
+    }
+  } else {
+    "x86_64-unknown-linux-gnu"
+  };
+  
   let possible_paths = vec![
+    format!("bin/desk-ai-backend-{}", target_triple),
+    format!("bin/desk-ai-backend-{}.exe", target_triple),
     format!("bin/{}", STANDALONE_BACKEND_NAME),
     format!("bin/{}.exe", STANDALONE_BACKEND_NAME),
     format!("{}", STANDALONE_BACKEND_NAME),
@@ -576,7 +590,7 @@ fn resolve_backend_script(app: &AppHandle) -> Result<PathBuf> {
     }
   }
 
-  // Fall back to bundled Python script
+  // Fall back to bundled Python script (for backward compatibility during transition)
   if let Some(path) = app.path_resolver().resolve_resource(PYTHON_BACKEND_RELATIVE) {
     eprintln!("[DEBUG] Checking Python script: {:?} (exists: {})", path, path.exists());
     if path.exists() {

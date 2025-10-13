@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 jobs:
@@ -16,7 +16,7 @@ jobs:
         platform: [macos-latest, ubuntu-22.04, windows-latest]
 
     runs-on: ${{ matrix.platform }}
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install Python dependencies
         run: |
@@ -92,7 +92,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'Desk AI ${{ github.ref_name }}'
-          releaseBody: 'See the assets below to download the installer for your platform.'
+          releaseName: "Desk AI ${{ github.ref_name }}"
+          releaseBody: "See the assets below to download the installer for your platform."
           releaseDraft: true
           prerelease: false

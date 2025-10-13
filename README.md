@@ -53,7 +53,11 @@ cd desk-ai
 
 # Install dependencies
 npm install
-pip install -r python/requirements.txt
+
+# Build the Rust backend (see BUILD.md for detailed instructions)
+cd rust-backend
+cargo build --release
+cd ..
 
 # Build the application
 npm run tauri:build
@@ -61,11 +65,13 @@ npm run tauri:build
 
 Find your installer in `src-tauri/target/release/bundle/`
 
+> **📖 For detailed build instructions**, see [BUILD.md](BUILD.md)
+
 ### 2. Get an API Key
 
 You'll need an API key from one of these providers:
 
-**OpenAI (GPT-4, GPT-4o, etc.)**
+**OpenAI (GPT-5, GPT-4o, etc.)**
 
 - Sign up at [platform.openai.com/signup](https://platform.openai.com/signup)
 - Go to [API Keys](https://platform.openai.com/api-keys) to create a new key
@@ -168,30 +174,70 @@ Want to contribute or build from source? Here's the technical overview:
 
 **Tech Stack**
 
-- Frontend: React 18 + TypeScript + Vite
-- Desktop: Tauri (Rust)
-- Backend: Python with asyncio
-- Communication: NDJSON over stdin/stdout
+- **Frontend**: React 18 + TypeScript + Vite
+- **Desktop**: Tauri (Rust)
+- **Backend**: Rust binary (desk-ai-backend)
+- **Communication**: NDJSON over stdin/stdout
+- **AI Providers**: OpenAI and Anthropic APIs
 
 **Project Structure**
 
 ```
 desk-ai/
-├── src/              # React frontend
-├── src-tauri/        # Rust/Tauri app
-├── python/           # Python AI backend
+├── src/              # React frontend (TypeScript)
+├── src-tauri/        # Tauri application (Rust)
+├── rust-backend/     # AI backend binary (Rust)
+│   ├── src/
+│   │   ├── main.rs         # Entry point
+│   │   ├── ndjson.rs       # Protocol layer
+│   │   ├── providers.rs    # OpenAI & Anthropic
+│   │   ├── tools.rs        # Tool implementations
+│   │   └── types.rs        # Type definitions
+│   └── Cargo.toml
 └── package.json      # Build scripts
 ```
+
+**Architecture**
+
+The application uses a sidecar architecture:
+
+1. **Tauri Frontend** (TypeScript/React) - User interface
+2. **NDJSON Bridge** - Bidirectional communication protocol
+3. **Rust Backend** (desk-ai-backend) - AI orchestration and tool execution
+4. **AI APIs** - OpenAI or Anthropic for language models
 
 **Development**
 
 ```bash
+# Install frontend dependencies
 npm install
-pip install -r python/requirements.txt
+
+# Build the Rust backend (required for full functionality)
+cd rust-backend
+cargo build --release
+cd ..
+
+# Run in development mode
 npm run tauri:dev
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+**Building from Source**
+
+For detailed build instructions including platform-specific requirements, see:
+- [BUILD.md](BUILD.md) - Comprehensive build guide
+- [REFACTOR.md](REFACTOR.md) - Architecture and implementation notes
+- [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - Complete feature documentation
+
+**Key Features**
+
+✨ **Rust Backend** (v0.1.0+):
+- Zero Python dependencies
+- Native performance
+- Smaller binary size
+- No Windows Defender false positives
+- Complete tool system with approval workflow
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ## � License
 
