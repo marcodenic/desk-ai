@@ -54,7 +54,7 @@ cd desk-ai
 # Install dependencies
 npm install
 
-# Build the Rust backend (see BUILD.md for detailed instructions)
+# Build the Rust backend
 cd rust-backend
 cargo build --release
 cd ..
@@ -64,8 +64,6 @@ npm run tauri:build
 ```
 
 Find your installer in `src-tauri/target/release/bundle/`
-
-> **📖 For detailed build instructions**, see [BUILD.md](BUILD.md)
 
 ### 2. Get an API Key
 
@@ -223,10 +221,29 @@ npm run tauri:dev
 
 **Building from Source**
 
-For detailed build instructions including platform-specific requirements, see:
-- [BUILD.md](BUILD.md) - Comprehensive build guide
-- [REFACTOR.md](REFACTOR.md) - Architecture and implementation notes
-- [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) - Complete feature documentation
+```bash
+# Install dependencies
+npm install
+
+# Build the Rust backend
+cd rust-backend
+cargo build --release
+cd ..
+
+# Copy the backend binary to the correct location
+# Linux/macOS
+mkdir -p src-tauri/bin
+cp rust-backend/target/release/desk-ai-backend src-tauri/bin/
+
+# Windows (PowerShell)
+# New-Item -ItemType Directory -Force -Path src-tauri\bin
+# Copy-Item rust-backend\target\release\desk-ai-backend.exe src-tauri\bin\
+
+# Build the Tauri app
+npm run tauri:build
+```
+
+The installer will be in `src-tauri/target/release/bundle/`
 
 **Key Features**
 
@@ -237,9 +254,7 @@ For detailed build instructions including platform-specific requirements, see:
 - No Windows Defender false positives
 - Complete tool system with approval workflow
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
-
-## � License
+## 📄 License
 
 MIT License - See [LICENSE](LICENSE) for details.
 
