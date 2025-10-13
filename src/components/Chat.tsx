@@ -1,5 +1,8 @@
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown, Square } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 
 import type { ApprovalRequest, BackendStatus, ChatMessage } from "../types";
 import { Button } from "./ui/button";
@@ -382,9 +385,73 @@ function MessageBubble({ message }: MessageProps) {
             : "border-border/50 bg-card/60"
         )}
       >
-        <pre className="whitespace-pre-wrap font-sans leading-relaxed">
-          {message.content || (message.streaming ? "…" : "")}
-        </pre>
+        {isUser ? (
+          <pre className="whitespace-pre-wrap font-sans leading-relaxed">
+            {message.content || (message.streaming ? "…" : "")}
+          </pre>
+        ) : (
+          <div className="prose prose-sm prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={{
+                h1: ({ node, ...props }) => (
+                  <h1 className="text-xl font-bold mb-3 mt-4 first:mt-0" {...props} />
+                ),
+                h2: ({ node, ...props }) => (
+                  <h2 className="text-lg font-semibold mb-2 mt-3 first:mt-0" {...props} />
+                ),
+                h3: ({ node, ...props }) => (
+                  <h3 className="text-base font-semibold mb-2 mt-3 first:mt-0" {...props} />
+                ),
+                ul: ({ node, ...props }) => (
+                  <ul className="list-disc list-inside mb-3 space-y-1" {...props} />
+                ),
+                ol: ({ node, ...props }) => (
+                  <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />
+                ),
+                li: ({ node, ...props }) => (
+                  <li className="leading-relaxed" {...props} />
+                ),
+                p: ({ node, ...props }) => (
+                  <p className="mb-3 last:mb-0 leading-relaxed" {...props} />
+                ),
+                blockquote: ({ node, ...props }) => (
+                  <blockquote className="border-l-4 border-primary/50 pl-4 italic my-3" {...props} />
+                ),
+                hr: ({ node, ...props }) => (
+                  <hr className="border-t border-border/50 my-4" {...props} />
+                ),
+                a: ({ node, ...props }) => (
+                  <a className="text-primary hover:underline" {...props} />
+                ),
+                strong: ({ node, ...props }) => (
+                  <strong className="font-bold" {...props} />
+                ),
+                em: ({ node, ...props }) => (
+                  <em className="italic" {...props} />
+                ),
+                pre: ({ node, ...props }) => (
+                  <pre className="bg-black/30 rounded p-3 overflow-x-auto my-3" {...props} />
+                ),
+                code: ({ node, className, children, ...props }) => {
+                  const isInline = !className;
+                  return isInline ? (
+                    <code className="bg-muted/50 px-1.5 py-0.5 rounded text-xs font-mono" {...props}>
+                      {children}
+                    </code>
+                  ) : (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  );
+                },
+              }}
+            >
+              {message.content || (message.streaming ? "…" : "")}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   );
