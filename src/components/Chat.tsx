@@ -98,15 +98,15 @@ function Chat({
 
   // Auto-scroll to bottom when messages change, but only if autoScroll is enabled
   useEffect(() => {
-    if (!autoScroll && !popupMode) return; // Always auto-scroll in popup mode
+    if (!autoScroll) return; // Respect user's scroll position
     const viewport = viewportRef.current;
     if (!viewport) {
       return;
     }
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
-  }, [messages, thinking, approvalRequest, autoScroll, popupMode]);
+  }, [messages, thinking, approvalRequest, autoScroll]);
 
-  // Force scroll to bottom when entering popup mode
+  // Force scroll to bottom when entering popup mode (one-time)
   useEffect(() => {
     if (popupMode) {
       const viewport = viewportRef.current;
@@ -116,7 +116,6 @@ function Chat({
           viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
         }, 100);
       }
-      setAutoScroll(true); // Enable auto-scroll in popup mode
     }
   }, [popupMode]);
 

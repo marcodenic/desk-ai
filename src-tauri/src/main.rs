@@ -4,12 +4,16 @@ mod backend;
 
 use backend::{BackendConfig, BackendState};
 use tauri::{Emitter, Manager, menu::{MenuBuilder, MenuItemBuilder}, tray::TrayIconBuilder, PhysicalPosition, PhysicalSize};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // Platform-specific imports for tray icon events (Linux doesn't support click events)
 #[cfg(not(target_os = "linux"))]
 use tauri::tray::{TrayIconEvent, MouseButtonState};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+// Global state to track if window is in mini mode
+static MINI_MODE: AtomicBool = AtomicBool::new(false);
 
 /// Log macro that only outputs in debug builds
 macro_rules! log_debug {
@@ -214,45 +218,53 @@ async fn hide_main_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn toggle_window_mode(app: tauri::AppHandle, popup_mode: bool) -> Result<(), String> {
+  // Update the global state
+  MINI_MODE.store(popup_mode, Ordering::SeqCst);
+  
   if let Some(window) = app.get_webview_window("main") {
-    if popup_mode {
-      // Popup mode: smaller window near taskbar
-      window.set_size(PhysicalSize::new(400, 600)).map_err(|e| e.to_string())?;
-      window.set_resizable(false).map_err(|e| e.to_string())?;
-      window.set_decorations(false).map_err(|e| e.to_string())?;
-      window.set_always_on_top(true).map_err(|e| e.to_string())?;
-      
-      // On Linux, add a small delay to ensure window properties are applied first
-      #[cfg(target_os = "linux")]
-      tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-      
-      // Position near taskbar (bottom-right corner)
-      if let Ok(monitor) = window.current_monitor() {
-        if let Some(monitor) = monitor {
-          let screen_size = monitor.size();
-          let window_size = window.outer_size().map_err(|e| e.to_string())?;
-          
-          // Position 10px from right edge and 50px from bottom (above taskbar)
-          let x = screen_size.width as i32 - window_size.width as i32 - 10;
-          let y = screen_size.height as i32 - window_size.height as i32 - 50;
-          
-          window.set_position(PhysicalPosition::new(x, y)).map_err(|e| e.to_string())?;
-        }
-      }
-    } else {
-      // Normal mode: larger resizable window
-      window.set_size(PhysicalSize::new(1100, 720)).map_err(|e| e.to_string())?;
-      window.set_resizable(true).map_err(|e| e.to_string())?;
-      window.set_decorations(true).map_err(|e| e.to_string())?;
-      window.set_always_on_top(false).map_err(|e| e.to_string())?;
-      window.center().map_err(|e| e.to_string())?;
-    }
-    
+    apply_window_mode(&window, popup_mode).await?;
     window.emit("window-mode-changed", popup_mode).map_err(|e| e.to_string())?;
     Ok(())
   } else {
     Err("Main window not found".to_string())
   }
+}
+
+// Helper function to apply window mode configuration
+async fn apply_window_mode(window: &tauri::WebviewWindow, popup_mode: bool) -> Result<(), String> {
+  if popup_mode {
+    // Popup mode: smaller window near taskbar
+    window.set_size(PhysicalSize::new(400, 600)).map_err(|e| e.to_string())?;
+    window.set_resizable(false).map_err(|e| e.to_string())?;
+    window.set_decorations(false).map_err(|e| e.to_string())?;
+    window.set_always_on_top(true).map_err(|e| e.to_string())?;
+    
+    // On Linux, add a small delay to ensure window properties are applied first
+    #[cfg(target_os = "linux")]
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    
+    // Position near taskbar (bottom-right corner)
+    if let Ok(monitor) = window.current_monitor() {
+      if let Some(monitor) = monitor {
+        let screen_size = monitor.size();
+        let window_size = window.outer_size().map_err(|e| e.to_string())?;
+        
+        // Position 10px from right edge and 50px from bottom (above taskbar)
+        let x = screen_size.width as i32 - window_size.width as i32 - 10;
+        let y = screen_size.height as i32 - window_size.height as i32 - 50;
+        
+        window.set_position(PhysicalPosition::new(x, y)).map_err(|e| e.to_string())?;
+      }
+    }
+  } else {
+    // Normal mode: larger resizable window
+    window.set_size(PhysicalSize::new(1100, 720)).map_err(|e| e.to_string())?;
+    window.set_resizable(true).map_err(|e| e.to_string())?;
+    window.set_decorations(true).map_err(|e| e.to_string())?;
+    window.set_always_on_top(false).map_err(|e| e.to_string())?;
+    window.center().map_err(|e| e.to_string())?;
+  }
+  Ok(())
 }
 
 fn main() {
@@ -288,7 +300,10 @@ fn main() {
       // Windows/macOS: Left-click toggles popup, right-click shows menu
       let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
       let toggle = MenuItemBuilder::with_id("toggle", "Show/Hide Desk AI").build(app)?;
-      let menu = MenuBuilder::new(app).items(&[&toggle, &quit]).build()?;
+      let mini_mode = MenuItemBuilder::with_id("mini_mode", "Mini Mode").build(app)?;
+      let menu = MenuBuilder::new(app)
+        .items(&[&toggle, &mini_mode, &quit])
+        .build()?;
       
       let _tray = TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
@@ -300,38 +315,50 @@ fn main() {
         .on_menu_event(|app, event| {
           match event.id.as_ref() {
             "toggle" => {
-              // Toggle window via menu (works on all platforms, essential for Linux)
+              // Toggle window visibility (respects current mode state)
               if let Some(window) = app.get_webview_window("main") {
                 let is_visible = window.is_visible().unwrap_or(false);
                 
                 if is_visible {
                   let _ = window.hide();
                 } else {
-                  // Show in popup mode near tray icon
-                  let _ = window.set_size(PhysicalSize::new(400, 600));
-                  let _ = window.set_resizable(false);
-                  let _ = window.set_decorations(false);
-                  let _ = window.set_always_on_top(true);
+                  // Show window in whatever mode is currently set
+                  let mini_mode = MINI_MODE.load(Ordering::SeqCst);
                   
-                  // Position near bottom-right (taskbar)
-                  // On Linux, add a small delay to ensure window properties are applied first
-                  #[cfg(target_os = "linux")]
-                  std::thread::sleep(std::time::Duration::from_millis(50));
-                  
-                  if let Ok(monitor) = window.current_monitor() {
-                    if let Some(monitor) = monitor {
-                      let screen_size = monitor.size();
-                      let x = screen_size.width as i32 - 410;
-                      let y = screen_size.height as i32 - 650;
-                      let _ = window.set_position(PhysicalPosition::new(x, y));
+                  // Apply the current window mode
+                  let app_handle = app.clone();
+                  tauri::async_runtime::spawn(async move {
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                      let _ = apply_window_mode(&window, mini_mode).await;
+                      let _ = window.show();
+                      let _ = window.set_focus();
+                      let _ = window.emit("window-mode-changed", mini_mode);
                     }
-                  }
-                  
-                  let _ = window.show();
-                  let _ = window.set_focus();
-                  let _ = window.emit("window-mode-changed", true);
+                  });
                 }
               }
+            }
+            "mini_mode" => {
+              // Toggle mini mode on/off
+              let current_mini_mode = MINI_MODE.load(Ordering::SeqCst);
+              let new_mini_mode = !current_mini_mode;
+              MINI_MODE.store(new_mini_mode, Ordering::SeqCst);
+              
+              // Apply the new mode if window is visible
+              if let Some(window) = app.get_webview_window("main") {
+                let is_visible = window.is_visible().unwrap_or(false);
+                if is_visible {
+                  let app_handle = app.clone();
+                  tauri::async_runtime::spawn(async move {
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                      let _ = apply_window_mode(&window, new_mini_mode).await;
+                      let _ = window.emit("window-mode-changed", new_mini_mode);
+                    }
+                  });
+                }
+              }
+              
+              log_info!("Mini mode toggled to: {}", new_mini_mode);
             }
             "quit" => {
               log_info!("Quit requested from tray menu");
@@ -346,7 +373,7 @@ fn main() {
           }
         })
         .on_tray_icon_event(move |_tray, _event| {
-          // On Windows/macOS: left-click toggles popup window
+          // On Windows/macOS: left-click toggles window (respects current mode)
           // On Linux: this event won't fire (libappindicator doesn't deliver left-clicks)
           #[cfg(not(target_os = "linux"))]
           match _event {
@@ -358,29 +385,17 @@ fn main() {
                 if is_visible {
                   let _ = window.hide();
                 } else {
-                  // Show in popup mode near tray icon
-                  let _ = window.set_size(PhysicalSize::new(400, 600));
-                  let _ = window.set_resizable(false);
-                  let _ = window.set_decorations(false);
-                  let _ = window.set_always_on_top(true);
+                  // Show window in whatever mode is currently set
+                  let mini_mode = MINI_MODE.load(Ordering::SeqCst);
                   
-                  // Position near bottom-right (taskbar)
-                  // On Linux, add a small delay to ensure window properties are applied first
-                  #[cfg(target_os = "linux")]
-                  std::thread::sleep(std::time::Duration::from_millis(50));
-                  
-                  if let Ok(monitor) = window.current_monitor() {
-                    if let Some(monitor) = monitor {
-                      let screen_size = monitor.size();
-                      let x = screen_size.width as i32 - 410;
-                      let y = screen_size.height as i32 - 650;
-                      let _ = window.set_position(PhysicalPosition::new(x, y));
+                  tauri::async_runtime::spawn(async move {
+                    if let Some(window) = app.get_webview_window("main") {
+                      let _ = apply_window_mode(&window, mini_mode).await;
+                      let _ = window.show();
+                      let _ = window.set_focus();
+                      let _ = window.emit("window-mode-changed", mini_mode);
                     }
-                  }
-                  
-                  let _ = window.show();
-                  let _ = window.set_focus();
-                  let _ = window.emit("window-mode-changed", true);
+                  });
                 }
               }
             }
