@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown, Square, Maximize2, Minimize2 } from "lucide-react";
+import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown, Square, Maximize2, Minimize2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -209,6 +209,21 @@ function Chat({
                 title="Expand to full mode"
               >
                 <Maximize2 className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await invoke("hide_main_window");
+                  } catch (error) {
+                    console.error("Failed to hide window:", error);
+                  }
+                }}
+                className="h-6 w-6 p-0"
+                title="Hide"
+              >
+                <X className="h-3 w-3" />
               </Button>
               <Button
                 variant="ghost"
