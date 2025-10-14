@@ -105,5 +105,5 @@ jobs:
             - ✅ Linux x86_64
             
             All builds include the Rust backend with no Python dependencies required.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
