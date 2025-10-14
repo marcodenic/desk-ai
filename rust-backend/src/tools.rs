@@ -1,3 +1,4 @@
+use crate::logger;
 use crate::ndjson::BridgeRef;
 use crate::types::{ApprovalResponse, BackendConfig, OutgoingEvent, ToolCallArgs};
 use anyhow::{anyhow, Result};
@@ -5,10 +6,19 @@ use chrono::Utc;
 use regex::Regex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::oneshot;
 use uuid::Uuid;
+
+/// Maximum characters to display in tool output preview before truncation
+const TOOL_OUTPUT_PREVIEW_LENGTH: usize = 200;
+
+/// Default timeout for shell commands in seconds
+const DEFAULT_SHELL_TIMEOUT_SECS: u64 = 120;
+
+/// Maximum characters in shell command output (last N chars if exceeded)
+const SHELL_OUTPUT_MAX_LENGTH: usize = 6000;
 
 pub struct ToolExecutor {
     config: BackendConfig,
@@ -40,7 +50,6 @@ impl ToolExecutor {
 
         // Check if approval is required
         let approval_required = self.requires_approval(name);
-        let approval_reason = self.get_approval_reason(name, args);
 
         if approval_required {
             let approved = self.request_approval(name, args).await?;
@@ -55,10 +64,8 @@ impl ToolExecutor {
                     .await;
                 return Ok(result);
             }
-            // Apply overrides if provided
-            if let Some(_overrides) = approved.overrides {
-                // TODO: Apply overrides to args
-            }
+            // Note: Override functionality is not currently implemented in the UI
+            // If needed in the future, approved.overrides can be used to modify args
         }
 
         // Execute the tool
@@ -75,8 +82,8 @@ impl ToolExecutor {
         match result {
             Ok(output) => {
                 // Emit tool call end
-                let truncated = if output.len() > 200 {
-                    format!("{}...", &output[..200])
+                let truncated = if output.len() > TOOL_OUTPUT_PREVIEW_LENGTH {
+                    format!("{}...", &output[..TOOL_OUTPUT_PREVIEW_LENGTH])
                 } else {
                     output.clone()
                 };
@@ -112,14 +119,30 @@ impl ToolExecutor {
         }
     }
 
-    fn get_approval_reason(&self, name: &str, args: &ToolCallArgs) -> String {
-        match name {
-            "run_shell" => args.command.clone().unwrap_or_default(),
-            "write_file" | "delete_path" | "read_file" | "list_directory" => {
-                args.path.clone().unwrap_or_default()
-            }
-            "search_files" => args.query.clone().unwrap_or_default(),
-            _ => String::new(),
+    /// Check if a shell command requires elevated privileges
+    fn requires_elevation(&self, command: &str) -> bool {
+        let cmd_lower = command.trim().to_lowercase();
+        
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: check for commands that typically need admin
+            cmd_lower.starts_with("sudo ") || // WSL/Cygwin
+            cmd_lower.contains("reg add") ||
+            cmd_lower.contains("reg delete") ||
+            cmd_lower.contains("sc.exe") ||
+            cmd_lower.contains("net user") ||
+            cmd_lower.contains("net localgroup") ||
+            cmd_lower.starts_with("runas") ||
+            cmd_lower.contains("set-executionpolicy") ||
+            cmd_lower.contains("install-") // PowerShell install commands
+        }
+        
+        #[cfg(not(target_os = "windows"))]
+        {
+            // Unix-like systems: check for sudo
+            cmd_lower.starts_with("sudo ") ||
+            cmd_lower.starts_with("doas ") || // OpenBSD alternative
+            cmd_lower.starts_with("pkexec ")
         }
     }
 
@@ -171,12 +194,31 @@ impl ToolExecutor {
             _ => action,
         };
 
+        // Check if this is an elevated command
+        let elevated = if action == "run_shell" {
+            if let Some(command) = &args.command {
+                Some(self.requires_elevation(command))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Log elevated command attempts
+        if let Some(true) = elevated {
+            if let Some(command) = &args.command {
+                logger::elevated_command(command, false); // Will log as DENIED initially, approved later
+            }
+        }
+
         // Emit tool request
         self.bridge
             .emit_event(OutgoingEvent::ToolRequest {
                 request_id: request_id.clone(),
                 action: action_map.to_string(),
                 details,
+                elevated,
             })
             .await;
 
@@ -189,16 +231,36 @@ impl ToolExecutor {
 
         eprintln!("[APPROVAL] Got approval result: {:?}", response.approved);
 
+        // Log the approval decision for elevated commands
+        if let Some(true) = elevated {
+            if let Some(command) = &args.command {
+                logger::elevated_command(command, response.approved);
+            }
+        }
+
         Ok(response)
     }
 
-    async fn run_shell(&self, args: &ToolCallArgs, prompt_id: &str) -> Result<String> {
+    async fn run_shell(&self, args: &ToolCallArgs, _prompt_id: &str) -> Result<String> {
         let command = args
             .command
             .as_ref()
             .ok_or_else(|| anyhow!("Shell command missing"))?;
-        let timeout = args.timeout.unwrap_or(120);
+        let timeout = args.timeout.unwrap_or(DEFAULT_SHELL_TIMEOUT_SECS);
         let session_id = Uuid::new_v4().to_string();
+
+        // Check if elevated privileges are required
+        let is_elevated = self.requires_elevation(command);
+        
+        // If elevated but not allowed, return error
+        if is_elevated && !self.config.allow_elevated_commands {
+            let error_msg = "This command requires elevated privileges, but elevated commands are disabled in settings. Enable 'Allow elevated commands' to run this.";
+            logger::error(&format!("Elevated command blocked: {}", command));
+            return Err(anyhow!(error_msg));
+        }
+
+        // Log the command execution
+        logger::tool_call("run_shell", &format!("cmd={}, elevated={}", command, is_elevated));
 
         // Emit shell start
         self.bridge
@@ -210,21 +272,11 @@ impl ToolExecutor {
             })
             .await;
 
-        // Spawn shell command
-        let mut child = if cfg!(target_os = "windows") {
-            Command::new("cmd")
-                .args(["/C", command])
-                .current_dir(&self.config.workdir)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()?
+        // Spawn shell command with or without elevation
+        let mut child = if is_elevated {
+            self.spawn_elevated_command(command).await?
         } else {
-            Command::new("sh")
-                .args(["-c", command])
-                .current_dir(&self.config.workdir)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()?
+            self.spawn_normal_command(command).await?
         };
 
         let stdout = child
@@ -238,9 +290,6 @@ impl ToolExecutor {
 
         let mut stdout_reader = BufReader::new(stdout).lines();
         let mut stderr_reader = BufReader::new(stderr).lines();
-
-        let mut stdout_buffer = Vec::new();
-        let mut stderr_buffer = Vec::new();
 
         let bridge_clone = self.bridge.clone();
         let session_id_clone = session_id.clone();
@@ -304,8 +353,8 @@ impl ToolExecutor {
             };
 
         // Wait for stream tasks to complete
-        stdout_buffer = stdout_task.await.unwrap_or_default();
-        stderr_buffer = stderr_task.await.unwrap_or_default();
+        let stdout_buffer = stdout_task.await.unwrap_or_default();
+        let stderr_buffer = stderr_task.await.unwrap_or_default();
 
         // Emit shell end
         self.bridge
@@ -322,8 +371,8 @@ impl ToolExecutor {
         let combined_str = combined.join("");
 
         // Truncate if too long
-        let result = if combined_str.len() > 6000 {
-            combined_str[combined_str.len() - 6000..].to_string()
+        let result = if combined_str.len() > SHELL_OUTPUT_MAX_LENGTH {
+            combined_str[combined_str.len() - SHELL_OUTPUT_MAX_LENGTH..].to_string()
         } else {
             combined_str
         };
@@ -333,6 +382,121 @@ impl ToolExecutor {
         } else {
             result
         })
+    }
+
+    /// Spawn a normal (non-elevated) shell command
+    async fn spawn_normal_command(&self, command: &str) -> Result<tokio::process::Child> {
+        if cfg!(target_os = "windows") {
+            Command::new("cmd")
+                .args(["/C", command])
+                .current_dir(&self.config.workdir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| anyhow!("Failed to spawn command: {}", e))
+        } else {
+            Command::new("sh")
+                .args(["-c", command])
+                .current_dir(&self.config.workdir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| anyhow!("Failed to spawn command: {}", e))
+        }
+    }
+
+    /// Spawn an elevated shell command with platform-specific privilege escalation
+    async fn spawn_elevated_command(&self, command: &str) -> Result<tokio::process::Child> {
+        // Strip sudo/pkexec prefix if present (we'll add our own)
+        let clean_command = command
+            .trim()
+            .trim_start_matches("sudo ")
+            .trim_start_matches("pkexec ")
+            .trim_start_matches("doas ");
+
+        #[cfg(target_os = "linux")]
+        {
+            // Try pkexec first (graphical auth dialog)
+            if Command::new("which")
+                .arg("pkexec")
+                .output()
+                .await
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+            {
+                logger::info("Using pkexec for elevated command");
+                return Command::new("pkexec")
+                    .arg("sh")
+                    .arg("-c")
+                    .arg(clean_command)
+                    .current_dir(&self.config.workdir)
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| anyhow!("Failed to spawn pkexec: {}", e));
+            }
+
+            // Fallback to sudo
+            logger::info("Using sudo for elevated command");
+            Command::new("sudo")
+                .arg("-S") // Read password from stdin
+                .arg("sh")
+                .arg("-c")
+                .arg(clean_command)
+                .current_dir(&self.config.workdir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .stdin(std::process::Stdio::null()) // No interactive password
+                .spawn()
+                .map_err(|e| anyhow!("Failed to spawn sudo: {}. You may need to configure passwordless sudo or use pkexec.", e))
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            // macOS: Use osascript for graphical authentication
+            logger::info("Using osascript for elevated command");
+            let escaped = clean_command.replace('\\', "\\\\").replace('"', "\\\"");
+            let script = format!(
+                "do shell script \"{}\" with administrator privileges",
+                escaped
+            );
+            
+            Command::new("osascript")
+                .arg("-e")
+                .arg(&script)
+                .current_dir(&self.config.workdir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| anyhow!("Failed to spawn osascript: {}", e))
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: Use PowerShell with Start-Process -Verb RunAs
+            logger::info("Using PowerShell elevation for command");
+            
+            // Create a PowerShell script that runs the command elevated
+            let ps_script = format!(
+                "Start-Process powershell -ArgumentList '-NoProfile','-Command',\"{}\" -Verb RunAs -Wait -WindowStyle Hidden",
+                clean_command.replace('"', "`\"")
+            );
+            
+            Command::new("powershell")
+                .arg("-NoProfile")
+                .arg("-Command")
+                .arg(&ps_script)
+                .current_dir(&self.config.workdir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| anyhow!("Failed to spawn elevated PowerShell: {}", e))
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        {
+            Err(anyhow!("Elevated commands not supported on this platform"))
+        }
     }
 
     async fn read_file(&self, args: &ToolCallArgs) -> Result<String> {
@@ -694,5 +858,81 @@ impl ToolExecutor {
         }
 
         Ok(candidate)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_output_preview_truncation() {
+        let long_output = "a".repeat(500);
+        let truncated = if long_output.len() > TOOL_OUTPUT_PREVIEW_LENGTH {
+            format!("{}...", &long_output[..TOOL_OUTPUT_PREVIEW_LENGTH])
+        } else {
+            long_output.clone()
+        };
+        
+        assert!(truncated.len() <= TOOL_OUTPUT_PREVIEW_LENGTH + 3); // + "..."
+        assert!(truncated.ends_with("..."));
+    }
+
+    #[test]
+    fn test_shell_output_max_length() {
+        let very_long_output = "x".repeat(10000);
+        
+        // Simulate truncation (keep last N chars)
+        let truncated = if very_long_output.len() > SHELL_OUTPUT_MAX_LENGTH {
+            very_long_output.chars().rev().take(SHELL_OUTPUT_MAX_LENGTH).collect::<String>()
+                .chars().rev().collect()
+        } else {
+            very_long_output.clone()
+        };
+        
+        assert_eq!(truncated.len(), SHELL_OUTPUT_MAX_LENGTH);
+    }
+
+    #[test]
+    fn test_elevation_detection_unix() {
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(command_requires_elevation("sudo ls -la"));
+            assert!(command_requires_elevation("pkexec systemctl restart service"));
+            assert!(command_requires_elevation("doas reboot"));
+            assert!(!command_requires_elevation("ls -la"));
+            assert!(!command_requires_elevation("echo 'hello'"));
+        }
+    }
+
+    #[test]
+    fn test_elevation_detection_windows() {
+        #[cfg(target_os = "windows")]
+        {
+            assert!(command_requires_elevation("reg add HKLM\\Software"));
+            assert!(command_requires_elevation("net user add testuser"));
+            assert!(command_requires_elevation("Set-ExecutionPolicy Unrestricted"));
+            assert!(!command_requires_elevation("dir"));
+            assert!(!command_requires_elevation("echo hello"));
+        }
+    }
+
+    // Helper function for testing elevation detection
+    #[cfg(not(target_os = "windows"))]
+    fn command_requires_elevation(command: &str) -> bool {
+        let cmd_lower = command.trim().to_lowercase();
+        cmd_lower.starts_with("sudo ") ||
+        cmd_lower.starts_with("doas ") ||
+        cmd_lower.starts_with("pkexec ")
+    }
+
+    #[cfg(target_os = "windows")]
+    fn command_requires_elevation(command: &str) -> bool {
+        let cmd_lower = command.trim().to_lowercase();
+        cmd_lower.starts_with("sudo ") ||
+        cmd_lower.contains("reg add") ||
+        cmd_lower.contains("reg delete") ||
+        cmd_lower.contains("net user") ||
+        cmd_lower.contains("set-executionpolicy")
     }
 }
