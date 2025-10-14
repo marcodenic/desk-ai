@@ -1,9 +1,10 @@
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown, Square } from "lucide-react";
+import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown, Square, Maximize2, Minimize2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 
 import type { ApprovalRequest, BackendStatus, ChatMessage, TerminalSession } from "../types";
 import { Button } from "./ui/button";
@@ -14,11 +15,13 @@ import { Textarea } from "./ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { Switch } from "./ui/switch";
 import { cn } from "../lib/utils";
+import { StatusIndicator, type StatusType } from "./StatusIndicator";
 
 interface ChatProps {
   messages: ChatMessage[];
   thinking: boolean;
   backendStatus: BackendStatus;
+  aiStatus: StatusType;
   disabled: boolean;
   onSend: (text: string) => Promise<void>;
   onStop: () => void;
@@ -41,6 +44,7 @@ function Chat({
   messages,
   thinking,
   backendStatus,
+  aiStatus,
   disabled,
   onSend,
   onStop,
@@ -162,31 +166,6 @@ function Chat({
     }
   }, [draft, canSend, onSend]);
 
-  const statusBadge = (() => {
-    switch (backendStatus) {
-      case "ready":
-        return (
-          <Badge variant="success" className="gap-1">
-            <Bolt className="h-4 w-4" /> Online
-          </Badge>
-        );
-      case "starting":
-        return (
-          <Badge variant="warning" className="gap-1">
-            <Loader2 className="h-4 w-4 animate-spin" /> Connecting
-          </Badge>
-        );
-      case "error":
-        return (
-          <Badge variant="destructive" className="gap-1">
-            <ShieldAlert className="h-4 w-4" /> Error
-          </Badge>
-        );
-      default:
-        return <Badge variant="outline">Idle</Badge>;
-    }
-  })();
-
   const placeholder = backendStatus === "ready"
     ? "Ask the assistant for help… (⌘⏎ / Ctrl⏎ to send)"
     : backendStatus === "starting"
@@ -198,16 +177,36 @@ function Chat({
       <div className="flex h-full flex-col bg-background">
         {popupMode ? (
           <header className="flex items-center justify-between border-b border-border px-3 py-2 bg-card/50">
-            <h1 className="text-xs font-semibold">DESK AI</h1>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClear}
-              disabled={messages.length === 0}
-              className="h-6 w-6 p-0"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xs font-semibold">DESK AI</h1>
+              <StatusIndicator status={aiStatus} compact />
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await invoke("toggle_window_mode", { popupMode: false });
+                  } catch (error) {
+                    console.error("Failed to toggle window mode:", error);
+                  }
+                }}
+                className="h-6 w-6 p-0"
+                title="Expand to full mode"
+              >
+                <Maximize2 className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClear}
+                disabled={messages.length === 0}
+                className="h-6 w-6 p-0"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
           </header>
         ) : (
           <header className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border px-4 py-3 min-h-[53px]">
@@ -217,10 +216,7 @@ function Chat({
                 super power your desktop
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs">
-              <div className="h-2 w-2 rounded-full bg-green-500" />
-              <span className="text-gray-400">Online</span>
-            </div>
+            <StatusIndicator status={aiStatus} compact />
             <div className="flex items-center gap-2 ml-auto">
               <Button
                 variant="ghost"
@@ -281,6 +277,7 @@ function Chat({
                   message={message} 
                   terminalSessions={terminalSessions}
                   showCommandOutput={showCommandOutput}
+                  popupMode={popupMode}
                 />
               ))}
               {thinking && <ThinkingBubble />}
@@ -378,9 +375,10 @@ interface MessageProps {
   message: ChatMessage;
   terminalSessions: TerminalSession[];
   showCommandOutput: boolean;
+  popupMode?: boolean;
 }
 
-function MessageBubble({ message, terminalSessions, showCommandOutput }: MessageProps) {
+function MessageBubble({ message, terminalSessions, showCommandOutput, popupMode = false }: MessageProps) {
   const isUser = message.role === "user";
   const isTool = message.role === "tool";
   const timestamp = new Date(message.createdAt).toLocaleTimeString();
@@ -411,7 +409,10 @@ function MessageBubble({ message, terminalSessions, showCommandOutput }: Message
       
       return (
         <div className="flex flex-col gap-2 py-1.5">
-          <div className="flex items-start gap-2.5">
+          <div className={cn(
+            "flex gap-2.5",
+            popupMode ? "flex-col items-start" : "items-start"
+          )}>
             <div className={cn(
               "flex items-center gap-2 py-1.5 px-3 rounded-full border shrink-0",
               isCompleted && "bg-green-500/10 border-green-500/30",
@@ -429,7 +430,10 @@ function MessageBubble({ message, terminalSessions, showCommandOutput }: Message
                 {statusIcon}
               </span>
             </div>
-            <code className="font-mono text-xs text-muted-foreground pt-2">$ {command}</code>
+            <code className={cn(
+              "font-mono text-xs text-muted-foreground break-all",
+              popupMode ? "pt-0" : "pt-2"
+            )}>$ {command}</code>
           </div>
           
           {/* Display terminal output if available and enabled */}

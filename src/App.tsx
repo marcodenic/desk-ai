@@ -21,6 +21,7 @@ import type {
 } from "./types";
 import { Button } from "./components/ui/button";
 import { cn } from "./lib/utils";
+import type { StatusType } from "./components/StatusIndicator";
 
 const DEFAULT_SETTINGS: Settings = {
   provider: "openai",
@@ -121,6 +122,7 @@ function App() {
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [popupMode, setPopupMode] = useState(false);
+  const [aiStatus, setAiStatus] = useState<StatusType>("offline");
   // Only open settings panel if no settings exist yet
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(() => {
     const hasValidSettings = settings.apiKey && settings.workdir;
@@ -689,6 +691,25 @@ function App() {
     [messages]
   );
 
+  // Compute AI status based on various states
+  useEffect(() => {
+    if (backendStatus === "error") {
+      setAiStatus("error");
+    } else if (backendStatus === "starting" || backendStatus === "idle") {
+      setAiStatus("offline");
+    } else if (approvals.length > 0) {
+      setAiStatus("waiting");
+    } else if (assistantStreaming) {
+      setAiStatus("streaming");
+    } else if (thinking) {
+      setAiStatus("thinking");
+    } else if (messages.some(m => m.role === "tool" && m.toolStatus === "executing")) {
+      setAiStatus("executing");
+    } else if (backendStatus === "ready") {
+      setAiStatus("idle");
+    }
+  }, [backendStatus, approvals.length, assistantStreaming, thinking, messages]);
+
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background lg:flex-row">
       {settingsPanelOpen && !popupMode && (
@@ -709,6 +730,7 @@ function App() {
           messages={messages}
           thinking={thinking}
           backendStatus={backendStatus}
+          aiStatus={aiStatus}
           disabled={chatDisabled || assistantStreaming}
           onSend={handleSendMessage}
           onStop={handleStopAssistant}

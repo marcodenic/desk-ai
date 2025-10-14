@@ -97,6 +97,35 @@
     background-color: #9ca3af !important;
   }
 
+  /* Status indicator animations */
+  @keyframes pulse-slow {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  @keyframes breathing {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(0.95);
+    }
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-breathing {
+    animation: breathing 1.5s ease-in-out infinite;
+  }
+
   /* Elevated command warning */
   .elevated-warning {
     display: flex;
