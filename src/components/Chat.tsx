@@ -377,7 +377,7 @@ function Chat({
               )}
               rows={popupMode ? 2 : 2}
             />
-            {isStreaming || sending || thinking ? (
+            {isStreaming || sending || thinking || approvalRequest ? (
               <Button 
                 type="button" 
                 onClick={onStop} 
