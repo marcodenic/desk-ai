@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dark background with subtle gradient -->
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a1a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0a0a0a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Rounded square background -->
+  <rect x="0" y="0" width="512" height="512" rx="90" fill="url(#bgGrad)"/>
+  
+  <!-- Accent hexagon shape in background -->
+  <g opacity="0.15">
+    <polygon points="256,80 380,156 380,308 256,384 132,308 132,156" fill="url(#accentGrad)"/>
+  </g>
+  
+  <!-- Main text "DAI" with modern font styling -->
+  <text x="256" y="320" 
+        font-family="system-ui, -apple-system, sans-serif" 
+        font-size="160" 
+        font-weight="700" 
+        text-anchor="middle" 
+        fill="#ffffff"
+        letter-spacing="-8">
+    DAI
+  </text>
+  
+  <!-- Small green accent dot/line under the text -->
+  <rect x="206" y="340" width="100" height="8" rx="4" fill="url(#accentGrad)"/>
+  
+  <!-- Subtle border for depth -->
+  <rect x="0" y="0" width="512" height="512" rx="90" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2"/>
+</svg>
