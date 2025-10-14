@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-  <!-- Pixel-perfect system tray icon -->
-  <!-- Transparent background -->
-  <rect x="0" y="0" width="32" height="32" fill="none"/>
-  <!-- Centered green circle with even pixel dimensions -->
-  <circle cx="16" cy="16" r="11" fill="#10b981"/>
-</svg>
