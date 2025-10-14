@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown, Square, Maximize2, Minimize2, X } from "lucide-react";
+import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown, Square, Maximize2, Minimize2, X, Gauge, Wifi, HardDrive, FolderTree } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -179,6 +179,14 @@ function Chat({
     }
   }, [draft, canSend, onSend]);
 
+  const handleSuggestionClick = useCallback((suggestion: string) => {
+    setDraft(suggestion);
+    // Focus the textarea after a brief delay to ensure state is updated
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 100);
+  }, []);
+
   const placeholder = backendStatus === "ready"
     ? "Ask the assistant for help… (⌘⏎ / Ctrl⏎ to send)"
     : backendStatus === "starting"
@@ -326,7 +334,7 @@ function Chat({
               ref={listRef}
               className="flex flex-col gap-3"
             >
-              {messages.length === 0 && !approvalRequest && !thinking && <EmptyState />}
+              {messages.length === 0 && !approvalRequest && !thinking && <EmptyState onSuggestionClick={handleSuggestionClick} popupMode={popupMode} />}
               {messages.map((message) => (
                 <MessageBubble 
                   key={message.id} 
@@ -680,17 +688,85 @@ function ApprovalBubble({ request, onApprove, onReject }: ApprovalBubbleProps) {
   );
 }
 
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-      <div className="rounded-full bg-primary/10 p-4 shadow-lg shadow-primary/10">
-        <Bolt className="h-6 w-6 text-primary" />
+interface EmptyStateProps {
+  onSuggestionClick: (suggestion: string) => void;
+  popupMode?: boolean;
+}
+
+function EmptyState({ onSuggestionClick, popupMode = false }: EmptyStateProps) {
+  const suggestions = [
+    {
+      icon: Gauge,
+      title: "Troubleshoot my computer",
+      description: "Help diagnose and fix performance or system issues",
+      prompt: "Help me troubleshoot why my computer is running slow",
+    },
+    {
+      icon: Wifi,
+      title: "Fix connection issues",
+      description: "Resolve WiFi, network, or connectivity problems",
+      prompt: "Help me fix my WiFi connection issues",
+    },
+    {
+      icon: HardDrive,
+      title: "Clean up disk space",
+      description: "Find large files and free up storage on your computer",
+      prompt: "Help me find what's using all my disk space",
+    },
+    {
+      icon: FolderTree,
+      title: "Organize my files",
+      description: "Sort downloads, remove duplicates, and tidy up folders",
+      prompt: "Help me organise my desktop folder into relevant folders",
+    },
+  ];
+
+  // Don't show suggestions in popup mode
+  if (popupMode) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+        <div className="rounded-full bg-primary/10 p-3">
+          <Bolt className="h-5 w-5 text-primary" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-semibold">Start a conversation</p>
+          <p className="text-xs text-muted-foreground">
+            Ask the assistant for help
+          </p>
+        </div>
       </div>
-      <div className="space-y-1.5">
-        <p className="text-base font-semibold">Start a conversation</p>
-        <p className="text-sm text-muted-foreground">
-          Let the assistant explore your project and automate workflows.
-        </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-8 py-12 text-center max-w-4xl mx-auto px-4">
+      <div className="flex flex-col items-center gap-4">
+        <div className="rounded-full bg-primary/10 p-4 shadow-lg shadow-primary/10">
+          <Bolt className="h-6 w-6 text-primary" />
+        </div>
+        <div className="space-y-2">
+          <p className="text-lg font-semibold">How can I help you today?</p>
+          <p className="text-sm text-muted-foreground">
+            Choose a suggestion or type your own request
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 w-full max-w-3xl">
+        {suggestions.map((suggestion, index) => (
+          <button
+            key={index}
+            onClick={() => onSuggestionClick(suggestion.prompt)}
+            className="group relative flex items-start gap-4 rounded-xl border border-border/30 bg-card/40 p-5 text-left transition-all hover:border-border/60 hover:bg-card/60"
+          >
+            <div className="rounded-lg bg-muted/40 p-2.5 group-hover:bg-muted/60 transition-colors shrink-0">
+              <suggestion.icon className="h-5 w-5 text-foreground" />
+            </div>
+            <div className="flex flex-col gap-1 min-w-0 pt-0.5">
+              <p className="text-sm font-medium leading-tight text-foreground">{suggestion.title}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{suggestion.description}</p>
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );

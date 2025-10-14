@@ -234,14 +234,22 @@ async fn toggle_window_mode(app: tauri::AppHandle, popup_mode: bool) -> Result<(
 async fn apply_window_mode(window: &tauri::WebviewWindow, popup_mode: bool) -> Result<(), String> {
   if popup_mode {
     // Popup mode: smaller window near taskbar
+    // First, ensure we can resize (in case it was locked)
+    window.set_resizable(true).map_err(|e| e.to_string())?;
+    
+    // Set the size with a small delay to ensure previous operations complete
+    #[cfg(target_os = "linux")]
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    
     window.set_size(PhysicalSize::new(400, 600)).map_err(|e| e.to_string())?;
+    
+    // Add delay before setting decorations and positioning
+    #[cfg(target_os = "linux")]
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    
     window.set_resizable(false).map_err(|e| e.to_string())?;
     window.set_decorations(false).map_err(|e| e.to_string())?;
     window.set_always_on_top(true).map_err(|e| e.to_string())?;
-    
-    // On Linux, add a small delay to ensure window properties are applied first
-    #[cfg(target_os = "linux")]
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     
     // Position near taskbar (bottom-right corner)
     if let Ok(monitor) = window.current_monitor() {
@@ -258,8 +266,17 @@ async fn apply_window_mode(window: &tauri::WebviewWindow, popup_mode: bool) -> R
     }
   } else {
     // Normal mode: larger resizable window
-    window.set_size(PhysicalSize::new(1100, 720)).map_err(|e| e.to_string())?;
+    // First enable resizing before changing size
     window.set_resizable(true).map_err(|e| e.to_string())?;
+    
+    #[cfg(target_os = "linux")]
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    
+    window.set_size(PhysicalSize::new(1100, 720)).map_err(|e| e.to_string())?;
+    
+    #[cfg(target_os = "linux")]
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    
     window.set_decorations(true).map_err(|e| e.to_string())?;
     window.set_always_on_top(false).map_err(|e| e.to_string())?;
     window.center().map_err(|e| e.to_string())?;
