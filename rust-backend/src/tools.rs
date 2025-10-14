@@ -388,7 +388,7 @@ impl ToolExecutor {
     async fn spawn_normal_command(&self, command: &str) -> Result<tokio::process::Child> {
         if cfg!(target_os = "windows") {
             Command::new("powershell")
-                .args(["-NoProfile", "-Command", command])
+                .args(["-NoProfile", "-NonInteractive", "-NoLogo", "-Command", command])
                 .current_dir(&self.config.workdir)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
