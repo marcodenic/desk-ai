@@ -222,6 +222,10 @@ async fn toggle_window_mode(app: tauri::AppHandle, popup_mode: bool) -> Result<(
       window.set_decorations(false).map_err(|e| e.to_string())?;
       window.set_always_on_top(true).map_err(|e| e.to_string())?;
       
+      // On Linux, add a small delay to ensure window properties are applied first
+      #[cfg(target_os = "linux")]
+      tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+      
       // Position near taskbar (bottom-right corner)
       if let Ok(monitor) = window.current_monitor() {
         if let Some(monitor) = monitor {
@@ -252,6 +256,26 @@ async fn toggle_window_mode(app: tauri::AppHandle, popup_mode: bool) -> Result<(
 }
 
 fn main() {
+  // Initialize X11 threading support on Linux to prevent xcb threading errors
+  // This fixes the "XInitThreads has not been called" error when toggling window modes
+  #[cfg(target_os = "linux")]
+  {
+    use std::os::raw::c_int;
+    
+    #[link(name = "X11")]
+    extern "C" {
+      fn XInitThreads() -> c_int;
+    }
+    
+    // SAFETY: XInitThreads must be called before any other X11 calls.
+    // It's safe to call multiple times - subsequent calls are ignored.
+    // This is required for multi-threaded applications using X11.
+    unsafe {
+      XInitThreads();
+    }
+    log_info!("X11 threading initialized");
+  }
+  
   log_info!("Desk AI starting...");
   
   tauri::Builder::default()
@@ -290,6 +314,10 @@ fn main() {
                   let _ = window.set_always_on_top(true);
                   
                   // Position near bottom-right (taskbar)
+                  // On Linux, add a small delay to ensure window properties are applied first
+                  #[cfg(target_os = "linux")]
+                  std::thread::sleep(std::time::Duration::from_millis(50));
+                  
                   if let Ok(monitor) = window.current_monitor() {
                     if let Some(monitor) = monitor {
                       let screen_size = monitor.size();
@@ -337,6 +365,10 @@ fn main() {
                   let _ = window.set_always_on_top(true);
                   
                   // Position near bottom-right (taskbar)
+                  // On Linux, add a small delay to ensure window properties are applied first
+                  #[cfg(target_os = "linux")]
+                  std::thread::sleep(std::time::Duration::from_millis(50));
+                  
                   if let Ok(monitor) = window.current_monitor() {
                     if let Some(monitor) = monitor {
                       let screen_size = monitor.size();

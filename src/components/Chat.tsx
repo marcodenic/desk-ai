@@ -98,13 +98,27 @@ function Chat({
 
   // Auto-scroll to bottom when messages change, but only if autoScroll is enabled
   useEffect(() => {
-    if (!autoScroll) return;
+    if (!autoScroll && !popupMode) return; // Always auto-scroll in popup mode
     const viewport = viewportRef.current;
     if (!viewport) {
       return;
     }
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
-  }, [messages, thinking, approvalRequest, autoScroll]);
+  }, [messages, thinking, approvalRequest, autoScroll, popupMode]);
+
+  // Force scroll to bottom when entering popup mode
+  useEffect(() => {
+    if (popupMode) {
+      const viewport = viewportRef.current;
+      if (viewport) {
+        // Use setTimeout to ensure DOM has updated
+        setTimeout(() => {
+          viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+        }, 100);
+      }
+      setAutoScroll(true); // Enable auto-scroll in popup mode
+    }
+  }, [popupMode]);
 
   // Check scroll position to show/hide scroll button and update autoScroll
   useEffect(() => {
@@ -218,6 +232,21 @@ function Chat({
             </div>
             <StatusIndicator status={aiStatus} compact />
             <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await invoke("toggle_window_mode", { popupMode: true });
+                  } catch (error) {
+                    console.error("Failed to toggle window mode:", error);
+                  }
+                }}
+                className="h-7 w-7 p-0"
+                title="Switch to mini mode"
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
