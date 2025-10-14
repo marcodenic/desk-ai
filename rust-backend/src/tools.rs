@@ -387,8 +387,8 @@ impl ToolExecutor {
     /// Spawn a normal (non-elevated) shell command
     async fn spawn_normal_command(&self, command: &str) -> Result<tokio::process::Child> {
         if cfg!(target_os = "windows") {
-            Command::new("cmd")
-                .args(["/C", command])
+            Command::new("powershell")
+                .args(["-NoProfile", "-Command", command])
                 .current_dir(&self.config.workdir)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
