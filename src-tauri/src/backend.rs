@@ -10,7 +10,7 @@ use anyhow::{anyhow, Context, Result};
 use parking_lot::Mutex;
 use serde::Serialize;
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::{
   io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
   process::{Child, ChildStdin, Command},
@@ -399,19 +399,28 @@ fn spawn_stdout_listener(
               match serde_json::from_str::<Value>(&line) {
                 Ok(json) => {
                   if let Some(event_type) = json.get("type").and_then(|v| v.as_str()) {
-                    eprintln!("[DEBUG] Emitting event: backend://{}", event_type);
-                    let _ = app.emit_all(&format!("backend://{}", event_type), json);
+                    let event_name = format!("backend://{}", event_type);
+                    eprintln!("[DEBUG] Emitting event: {}", event_name);
+                    if let Err(e) = app.emit(&event_name, json.clone()) {
+                      eprintln!("[DEBUG] Failed to emit event {}: {}", event_name, e);
+                    } else {
+                      eprintln!("[DEBUG] Successfully emitted event: {}", event_name);
+                    }
                   } else {
                     eprintln!("[DEBUG] Received JSON without type field");
-                    let _ = app.emit_all("backend://error", json!({"message": "Received JSON without a type", "raw": line}));
+                    if let Err(e) = app.emit("backend://error", json!({"message": "Received JSON without a type", "raw": line})) {
+                      eprintln!("[DEBUG] Failed to emit error event: {}", e);
+                    }
                   }
                 }
                 Err(err) => {
                   eprintln!("[DEBUG] Failed to parse JSON: {}", err);
-                  let _ = app.emit_all(
+                  if let Err(e) = app.emit(
                     "backend://error",
                     json!({ "message": "Failed to parse backend JSON", "raw": line, "error": err.to_string() }),
-                  );
+                  ) {
+                    eprintln!("[DEBUG] Failed to emit error event: {}", e);
+                  }
                 }
               }
             }
@@ -421,10 +430,12 @@ fn spawn_stdout_listener(
             }
             Err(err) => {
               eprintln!("[DEBUG] Error reading backend STDOUT: {}", err);
-              let _ = app.emit_all(
+              if let Err(e) = app.emit(
                 "backend://error",
                 json!({ "message": "Failed reading backend output", "error": err.to_string() }),
-              );
+              ) {
+                eprintln!("[DEBUG] Failed to emit error event: {}", e);
+              }
               break;
             }
           }
@@ -444,10 +455,12 @@ fn spawn_stderr_listener(app: AppHandle, stderr: tokio::process::ChildStderr) ->
         continue;
       }
       eprintln!("[DEBUG] Backend STDERR: {}", trimmed);
-      let _ = app.emit_all(
+      if let Err(e) = app.emit(
         "backend://stderr",
         json!({ "message": trimmed }),
-      );
+      ) {
+        eprintln!("[DEBUG] Failed to emit stderr event: {}", e);
+      }
     }
     eprintln!("[DEBUG] Backend STDERR stream closed");
   })
@@ -467,16 +480,20 @@ fn spawn_wait_task(app: AppHandle, child: Arc<AsyncMutex<Child>>) -> tauri::asyn
         #[cfg(not(unix))]
         let signal: Option<i32> = None;
         
-        let _ = app.emit_all(
+        if let Err(e) = app.emit(
           "backend://exit",
           json!({ "code": status.code(), "signal": signal }),
-        );
+        ) {
+          eprintln!("[DEBUG] Failed to emit exit event: {}", e);
+        }
       }
       Err(err) => {
-        let _ = app.emit_all(
+        if let Err(e) = app.emit(
           "backend://error",
           json!({ "message": "Backend process wait failed", "error": err.to_string() }),
-        );
+        ) {
+          eprintln!("[DEBUG] Failed to emit error event: {}", e);
+        }
       }
     }
   })
@@ -570,15 +587,15 @@ fn resolve_backend_script(app: &AppHandle) -> Result<PathBuf> {
     "desk-ai-backend.exe".to_string(),
   ];
   
-  for path_str in possible_paths {
-    if let Some(path) = app.path_resolver().resolve_resource(&path_str) {
+  // Try resource directory first
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    for path_str in &possible_paths {
+      let path = resource_dir.join(path_str);
       eprintln!("[DEBUG] Checking: {:?} -> {:?} (exists: {})", path_str, path, path.exists());
       if path.exists() {
         eprintln!("[DEBUG] Found backend sidecar: {:?}", path);
         return Ok(path);
       }
-    } else {
-      eprintln!("[DEBUG] Could not resolve resource: {:?}", path_str);
     }
   }
 

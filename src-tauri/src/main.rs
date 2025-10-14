@@ -3,7 +3,8 @@
 mod backend;
 
 use backend::{BackendConfig, BackendState};
-use tauri::{api::dialog::FileDialogBuilder, Manager};
+use tauri::{Emitter, Manager};
+use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
 async fn start_backend(
@@ -18,10 +19,12 @@ async fn start_backend(
   
   if let Err(ref err) = result {
     eprintln!("[COMMAND ERROR] Failed to start backend: {}", err);
-    let _ = app.emit_all("backend://error", serde_json::json!({
+    if let Err(e) = app.emit("backend://error", serde_json::json!({
       "type": "error",
       "message": format!("Failed to start backend: {}", err)
-    }));
+    })) {
+      eprintln!("[COMMAND ERROR] Failed to emit error event: {}", e);
+    }
   }
   
   result.map_err(|err| err.to_string())
@@ -81,15 +84,12 @@ async fn kill_command(
 }
 
 #[tauri::command]
-async fn select_working_directory() -> Result<Option<String>, String> {
-  let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
-  FileDialogBuilder::new().pick_folder(move |path| {
-    let selected = path.map(|p| p.to_string_lossy().to_string());
-    let _ = tx.send(selected);
-  });
-
-  rx.await
-    .map_err(|_| "Dialog channel dropped unexpectedly".to_string())
+async fn select_working_directory(app: tauri::AppHandle) -> Result<Option<String>, String> {
+  let folder = app.dialog()
+    .file()
+    .blocking_pick_folder();
+  
+    Ok(folder.and_then(|p| p.as_path().map(|path| path.to_string_lossy().to_string())))
 }
 
 #[tauri::command]
@@ -117,6 +117,9 @@ async fn get_log_path() -> Result<String, String> {
 
 fn main() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_http::init())
+    .plugin(tauri_plugin_shell::init())
     .manage(BackendState::new())
     .invoke_handler(tauri::generate_handler![
       start_backend,
@@ -128,9 +131,9 @@ fn main() {
       select_working_directory,
       get_log_path
     ])
-    .on_window_event(|event| {
-      if let tauri::WindowEvent::CloseRequested { .. } = event.event() {
-        let app_handle = event.window().app_handle();
+    .on_window_event(|window, event| {
+      if let tauri::WindowEvent::CloseRequested { .. } = event {
+        let app_handle = window.app_handle().clone();
         tauri::async_runtime::spawn(async move {
           let state = app_handle.state::<BackendState>();
           let _ = backend::shutdown_backend(state).await;

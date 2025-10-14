@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import SettingsPanel from "./components/SettingsPanel";
 import Chat from "./components/Chat";
@@ -138,15 +138,7 @@ function App() {
     settings.allowSystemWide,
   ]);
 
-  // Auto-start backend if settings are already configured
-  useEffect(() => {
-    const hasValidSettings = settings.apiKey && settings.workdir;
-    if (hasValidSettings && backendStatus === "idle") {
-      console.log("[App] Auto-starting backend with saved settings");
-      handleSaveSettings();
-    }
-  }, []); // Run once on mount
-
+  // Register event listeners on mount (once)
   useEffect(() => {
     const unlistenFns: UnlistenFn[] = [];
 
@@ -169,6 +161,8 @@ function App() {
       await register<ToolCallEndEvent>("backend://tool_call_end", handleToolCallEnd);
       await register<BackendEvent>("backend://stderr", handleBackendStderr);
       await register<BackendEvent>("backend://exit", handleBackendExit);
+      
+      console.log("[App] Event listeners registered");
     }
 
     setupListeners().catch((error) => {
@@ -178,20 +172,49 @@ function App() {
     return () => {
       unlistenFns.forEach((unlisten) => unlisten());
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Handlers are stable via useCallback, only register once
+
+  // Auto-start backend after a small delay to ensure listeners are ready
+  useEffect(() => {
+    const hasValidSettings = settings.apiKey && settings.workdir;
+    if (hasValidSettings && backendStatus === "idle") {
+      // Small delay to ensure event listeners are registered first
+      const timer = setTimeout(() => {
+        console.log("[App] Auto-starting backend with saved settings");
+        handleSaveSettings();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount with initial values
 
   const handleStatusEvent = useCallback((payload: StatusEvent) => {
+    console.log("[DEBUG App.tsx] handleStatusEvent called with:", payload);
+    
+    // Clear the safety timeout if it exists
+    const timeoutId = (window as any).__savingConfigTimeout;
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      delete (window as any).__savingConfigTimeout;
+    }
+    
     switch (payload.status) {
       case "starting":
+        console.log("[DEBUG App.tsx] Setting status to starting");
         setBackendStatus("starting");
         break;
       case "ready":
+        console.log("[DEBUG App.tsx] Setting status to ready, clearing savingConfig");
         setBackendStatus("ready");
         setSettingsPanelOpen(false); // Hide settings when backend is ready
+        setSavingConfig(false); // Clear saving state when backend is ready
         break;
       case "error":
       default:
+        console.log("[DEBUG App.tsx] Setting status to error");
         setBackendStatus("error");
+        setSavingConfig(false); // Clear saving state on error
         break;
     }
     setBackendStatusMessage(payload.message);
@@ -473,6 +496,12 @@ function App() {
     setBackendStatus("starting");
     setBackendStatusMessage("Configuring backend…");
 
+    // Safety timeout: clear saving state after 5 seconds if no status event received
+    const timeoutId = setTimeout(() => {
+      console.warn("[App] Status event timeout - clearing savingConfig state");
+      setSavingConfig(false);
+    }, 5000);
+
     try {
       // Check if backend is running by checking status
       const isBackendRunning = backendStatus === "ready" || backendStatus === "starting";
@@ -516,15 +545,15 @@ function App() {
       }
       
       // Backend will emit status events - we'll wait for them
-      // Status will update to "ready" via handleStatusEvent listener
-      // If there's an auth error, it will be caught on first actual use
+      // The handleStatusEvent will clear savingConfig and timeoutId
+      // Store timeout ID so it can be cleared by event handler
+      (window as any).__savingConfigTimeout = timeoutId;
     } catch (error) {
       console.error("Failed to configure backend", error);
       setBackendStatus("error");
       setBackendStatusMessage(error instanceof Error ? error.message : "Failed to configure backend");
-      setTestingCredentials(false);
-    } finally {
       setSavingConfig(false);
+      clearTimeout(timeoutId);
     }
   }, [settings, backendStatus]);
 

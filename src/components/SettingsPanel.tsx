@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetch as tauriFetch } from "@tauri-apps/api/http";
-import { invoke } from "@tauri-apps/api/tauri";
-import { open } from "@tauri-apps/api/shell";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-shell";
 import { Loader2, FolderOpen, RefreshCcw, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, FileText } from "lucide-react";
 
 import type { BackendStatus, Provider, Settings } from "../types";
@@ -44,12 +44,12 @@ interface ProviderData {
 }
 
 async function fetchModels(): Promise<Record<Provider, string[]>> {
-  const response = await tauriFetch<Record<string, ProviderData>>("https://models.dev/api.json", {
+  const response = await tauriFetch("https://models.dev/api.json", {
     method: "GET",
-    timeout: 30,
+    connectTimeout: 30,
   });
 
-  const data = response.data;
+  const data = await response.json() as Record<string, ProviderData>;
   const anthropicModels = data.anthropic?.models
     ? Object.values(data.anthropic.models)
         .filter((model) => model.tool_call)
