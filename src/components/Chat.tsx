@@ -195,45 +195,58 @@ function Chat({
               <StatusIndicator status={aiStatus} compact />
             </div>
             <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={async () => {
-                  try {
-                    await invoke("toggle_window_mode", { popupMode: false });
-                  } catch (error) {
-                    console.error("Failed to toggle window mode:", error);
-                  }
-                }}
-                className="h-6 w-6 p-0"
-                title="Expand to full mode"
-              >
-                <Maximize2 className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={async () => {
-                  try {
-                    await invoke("hide_main_window");
-                  } catch (error) {
-                    console.error("Failed to hide window:", error);
-                  }
-                }}
-                className="h-6 w-6 p-0"
-                title="Hide"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClear}
-                disabled={messages.length === 0}
-                className="h-6 w-6 p-0"
-              >
-                <Trash2 className="h-3 w-3" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await invoke("toggle_window_mode", { popupMode: false });
+                      } catch (error) {
+                        console.error("Failed to toggle window mode:", error);
+                      }
+                    }}
+                    className="h-6 w-6 p-0"
+                  >
+                    <Maximize2 className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Expand to full mode</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await invoke("hide_main_window");
+                      } catch (error) {
+                        console.error("Failed to hide window:", error);
+                      }
+                    }}
+                    className="h-6 w-6 p-0"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Hide window</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onClear}
+                    disabled={messages.length === 0}
+                    className="h-6 w-6 p-0"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Clear chat</TooltipContent>
+              </Tooltip>
             </div>
           </header>
         ) : (
