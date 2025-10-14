@@ -364,7 +364,7 @@ function Chat({
               onKeyDown={handleKeyDown}
               disabled={backendStatus !== "ready" || disabled || sending}
               className={cn(
-                "resize-none border-border/50 bg-card/50 text-sm shadow-sm pr-12 overflow-y-auto",
+                "resize-none text-sm pr-12 overflow-y-auto",
                 popupMode ? "min-h-[60px] max-h-[25vh] py-2" : "min-h-[88px] max-h-[30vh] py-2.5"
               )}
               rows={popupMode ? 2 : 2}
