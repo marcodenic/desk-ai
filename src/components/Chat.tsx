@@ -57,9 +57,22 @@ function Chat({
   const [autoScroll, setAutoScroll] = useState(true);
   const listRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const canSend = draft.trim().length > 0 && !disabled && backendStatus === "ready" && !sending;
   const isStreaming = useMemo(() => messages.some((message) => message.streaming), [messages]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    
+    // Reset height to recalculate
+    textarea.style.height = 'auto';
+    // Set to scrollHeight but respect max-height
+    const maxHeight = window.innerHeight * 0.3; // 30vh
+    textarea.style.height = Math.min(textarea.scrollHeight, maxHeight) + 'px';
+  }, [draft]);
 
   // Auto-scroll to bottom when messages change, but only if autoScroll is enabled
   useEffect(() => {
@@ -260,13 +273,14 @@ function Chat({
         <div className="border-t border-border/40 bg-card/20 px-4 py-3">
           <form onSubmit={handleSubmit} className="relative">
             <Textarea
+              ref={textareaRef}
               value={draft}
               placeholder={placeholder}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={handleKeyDown}
               disabled={backendStatus !== "ready" || disabled || sending}
-              className="min-h-[44px] max-h-[30vh] resize-none border-border/50 bg-card/50 text-sm shadow-sm py-2.5 pr-12"
-              rows={1}
+              className="min-h-[88px] max-h-[30vh] resize-none border-border/50 bg-card/50 text-sm shadow-sm py-2.5 pr-12 overflow-y-auto"
+              rows={2}
             />
             {isStreaming || sending || thinking ? (
               <Button 
@@ -274,19 +288,19 @@ function Chat({
                 onClick={onStop} 
                 size="sm" 
                 variant="destructive"
-                className="absolute right-2 bottom-2 h-8 w-8 p-0 shrink-0"
+                className="absolute right-2 bottom-2 h-10 w-10 p-0 shrink-0"
               >
-                <Square className="h-4 w-4" />
+                <Square className="h-5 w-5" />
               </Button>
             ) : (
               <Button 
                 type="submit" 
                 disabled={!canSend} 
                 size="sm" 
-                className="absolute right-2 bottom-2 h-8 w-8 p-0 shrink-0"
+                className="absolute right-2 bottom-2 h-10 w-10 p-0 shrink-0"
                 style={{ backgroundColor: 'white', color: 'black' }}
               >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>
