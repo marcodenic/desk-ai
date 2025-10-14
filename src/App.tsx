@@ -120,6 +120,7 @@ function App() {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [popupMode, setPopupMode] = useState(false);
   // Only open settings panel if no settings exist yet
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(() => {
     const hasValidSettings = settings.apiKey && settings.workdir;
@@ -168,6 +169,16 @@ function App() {
       await register<ToolCallEndEvent>("backend://tool_call_end", handleToolCallEnd);
       await register<BackendEvent>("backend://stderr", handleBackendStderr);
       await register<BackendEvent>("backend://exit", handleBackendExit);
+      
+      // Listen for window mode changes
+      const unlistenWindowMode = await listen<boolean>("window-mode-changed", (event) => {
+        setPopupMode(event.payload);
+        // Auto-close settings in popup mode
+        if (event.payload) {
+          setSettingsPanelOpen(false);
+        }
+      });
+      unlistenFns.push(unlistenWindowMode);
     }
 
     setupListeners().catch((error) => {
@@ -680,7 +691,7 @@ function App() {
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background lg:flex-row">
-      {settingsPanelOpen && (
+      {settingsPanelOpen && !popupMode && (
         <div className="w-full border-b border-border/40 lg:w-72 lg:border-b-0 lg:border-r">
           <SettingsPanel
             settings={settings}
@@ -717,6 +728,7 @@ function App() {
           }
           terminalSessions={terminalSessions}
           showCommandOutput={settings.showCommandOutput}
+          popupMode={popupMode}
         />
       </div>
     </div>

@@ -3,6 +3,7 @@ import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Ter
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import { listen } from "@tauri-apps/api/event";
 
 import type { ApprovalRequest, BackendStatus, ChatMessage, TerminalSession } from "../types";
 import { Button } from "./ui/button";
@@ -33,6 +34,7 @@ interface ChatProps {
   onToggleSystemWide: () => void;
   terminalSessions: TerminalSession[];
   showCommandOutput: boolean;
+  popupMode?: boolean;
 }
 
 function Chat({
@@ -54,6 +56,7 @@ function Chat({
   onToggleSystemWide,
   terminalSessions,
   showCommandOutput,
+  popupMode = false,
 }: ChatProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -77,6 +80,17 @@ function Chat({
     const maxHeight = window.innerHeight * 0.3; // 30vh
     textarea.style.height = Math.min(textarea.scrollHeight, maxHeight) + 'px';
   }, [draft]);
+
+  // Listen for focus-input event from global shortcut
+  useEffect(() => {
+    const unlisten = listen('focus-input', () => {
+      textareaRef.current?.focus();
+    });
+
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, []);
 
   // Auto-scroll to bottom when messages change, but only if autoScroll is enabled
   useEffect(() => {
@@ -182,64 +196,79 @@ function Chat({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex h-full flex-col bg-background">
-        <header className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border px-4 py-3 min-h-[53px]">
-          <div className="flex items-center gap-3">
-            <h1 className="text-sm font-semibold">DESK AI</h1>
-            <span className="text-xs text-muted-foreground">
-              super power your desktop
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs">
-            <div className="h-2 w-2 rounded-full bg-green-500" />
-            <span className="text-gray-400">Online</span>
-          </div>
-          <div className="flex items-center gap-2 ml-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onToggleSettings}
-              className="h-7 w-7 p-0"
-            >
-              <Settings2 className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={autoApproveAll}
-                onCheckedChange={onToggleAutoApprove}
-              />
-              <label className="text-xs cursor-pointer" onClick={onToggleAutoApprove}>
-                {autoApproveAll ? "Auto Allow" : "Manual Approve"}
-              </label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={allowSystemWide}
-                onCheckedChange={() => onToggleSystemWide()}
-                disabled={backendStatus !== "ready"}
-              />
-              <label className="text-xs cursor-pointer" onClick={onToggleSystemWide}>
-                {allowSystemWide ? "System Wide" : "Workdir Only"}
-              </label>
-            </div>
+        {popupMode ? (
+          <header className="flex items-center justify-between border-b border-border px-3 py-2 bg-card/50">
+            <h1 className="text-xs font-semibold">DESK AI</h1>
             <Button
               variant="ghost"
               size="sm"
               onClick={onClear}
               disabled={messages.length === 0}
-              className="h-7 gap-1.5 px-2.5 text-xs"
+              className="h-6 w-6 p-0"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              Clear Chat
+              <Trash2 className="h-3 w-3" />
             </Button>
-          </div>
-        </header>
+          </header>
+        ) : (
+          <header className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border px-4 py-3 min-h-[53px]">
+            <div className="flex items-center gap-3">
+              <h1 className="text-sm font-semibold">DESK AI</h1>
+              <span className="text-xs text-muted-foreground">
+                super power your desktop
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs">
+              <div className="h-2 w-2 rounded-full bg-green-500" />
+              <span className="text-gray-400">Online</span>
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleSettings}
+                className="h-7 w-7 p-0"
+              >
+                <Settings2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={autoApproveAll}
+                  onCheckedChange={onToggleAutoApprove}
+                />
+                <label className="text-xs cursor-pointer" onClick={onToggleAutoApprove}>
+                  {autoApproveAll ? "Auto Allow" : "Manual Approve"}
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={allowSystemWide}
+                  onCheckedChange={() => onToggleSystemWide()}
+                  disabled={backendStatus !== "ready"}
+                />
+                <label className="text-xs cursor-pointer" onClick={onToggleSystemWide}>
+                  {allowSystemWide ? "System Wide" : "Workdir Only"}
+                </label>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClear}
+                disabled={messages.length === 0}
+                className="h-7 gap-1.5 px-2.5 text-xs"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear Chat
+              </Button>
+            </div>
+          </header>
+        )}
 
         <div className="relative flex-1 overflow-hidden">
           <ScrollArea 
             viewportRef={viewportRef}
-            className="subtle-scrollbar h-full px-6 py-4"
+            className={cn("subtle-scrollbar h-full", popupMode ? "px-3 py-2" : "px-6 py-4")}
           >
             <div 
               ref={listRef}
@@ -272,7 +301,7 @@ function Chat({
           )}
         </div>
 
-        <div className="border-t border-border/40 bg-card/20 px-4 py-3">
+        <div className={cn("border-t border-border/40 bg-card/20", popupMode ? "px-3 py-2" : "px-4 py-3")}>
           <form onSubmit={handleSubmit} className="relative">
             <Textarea
               ref={textareaRef}
@@ -281,8 +310,11 @@ function Chat({
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={handleKeyDown}
               disabled={backendStatus !== "ready" || disabled || sending}
-              className="min-h-[88px] max-h-[30vh] resize-none border-border/50 bg-card/50 text-sm shadow-sm py-2.5 pr-12 overflow-y-auto"
-              rows={2}
+              className={cn(
+                "resize-none border-border/50 bg-card/50 text-sm shadow-sm pr-12 overflow-y-auto",
+                popupMode ? "min-h-[60px] max-h-[25vh] py-2" : "min-h-[88px] max-h-[30vh] py-2.5"
+              )}
+              rows={popupMode ? 2 : 2}
             />
             {isStreaming || sending || thinking ? (
               <Button 
@@ -290,19 +322,19 @@ function Chat({
                 onClick={onStop} 
                 size="sm" 
                 variant="destructive"
-                className="absolute right-2 bottom-2 h-10 w-10 p-0 shrink-0"
+                className={cn("absolute right-2 p-0 shrink-0", popupMode ? "bottom-2 h-8 w-8" : "bottom-2 h-10 w-10")}
               >
-                <Square className="h-5 w-5" />
+                <Square className={popupMode ? "h-4 w-4" : "h-5 w-5"} />
               </Button>
             ) : (
               <Button 
                 type="submit" 
                 disabled={!canSend} 
                 size="sm" 
-                className="absolute right-2 bottom-2 h-10 w-10 p-0 shrink-0"
+                className={cn("absolute right-2 p-0 shrink-0", popupMode ? "bottom-2 h-8 w-8" : "bottom-2 h-10 w-10")}
                 style={{ backgroundColor: 'white', color: 'black' }}
               >
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className={popupMode ? "h-4 w-4" : "h-5 w-5"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>

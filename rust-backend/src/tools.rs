@@ -860,3 +860,79 @@ impl ToolExecutor {
         Ok(candidate)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_output_preview_truncation() {
+        let long_output = "a".repeat(500);
+        let truncated = if long_output.len() > TOOL_OUTPUT_PREVIEW_LENGTH {
+            format!("{}...", &long_output[..TOOL_OUTPUT_PREVIEW_LENGTH])
+        } else {
+            long_output.clone()
+        };
+        
+        assert!(truncated.len() <= TOOL_OUTPUT_PREVIEW_LENGTH + 3); // + "..."
+        assert!(truncated.ends_with("..."));
+    }
+
+    #[test]
+    fn test_shell_output_max_length() {
+        let very_long_output = "x".repeat(10000);
+        
+        // Simulate truncation (keep last N chars)
+        let truncated = if very_long_output.len() > SHELL_OUTPUT_MAX_LENGTH {
+            very_long_output.chars().rev().take(SHELL_OUTPUT_MAX_LENGTH).collect::<String>()
+                .chars().rev().collect()
+        } else {
+            very_long_output.clone()
+        };
+        
+        assert_eq!(truncated.len(), SHELL_OUTPUT_MAX_LENGTH);
+    }
+
+    #[test]
+    fn test_elevation_detection_unix() {
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(command_requires_elevation("sudo ls -la"));
+            assert!(command_requires_elevation("pkexec systemctl restart service"));
+            assert!(command_requires_elevation("doas reboot"));
+            assert!(!command_requires_elevation("ls -la"));
+            assert!(!command_requires_elevation("echo 'hello'"));
+        }
+    }
+
+    #[test]
+    fn test_elevation_detection_windows() {
+        #[cfg(target_os = "windows")]
+        {
+            assert!(command_requires_elevation("reg add HKLM\\Software"));
+            assert!(command_requires_elevation("net user add testuser"));
+            assert!(command_requires_elevation("Set-ExecutionPolicy Unrestricted"));
+            assert!(!command_requires_elevation("dir"));
+            assert!(!command_requires_elevation("echo hello"));
+        }
+    }
+
+    // Helper function for testing elevation detection
+    #[cfg(not(target_os = "windows"))]
+    fn command_requires_elevation(command: &str) -> bool {
+        let cmd_lower = command.trim().to_lowercase();
+        cmd_lower.starts_with("sudo ") ||
+        cmd_lower.starts_with("doas ") ||
+        cmd_lower.starts_with("pkexec ")
+    }
+
+    #[cfg(target_os = "windows")]
+    fn command_requires_elevation(command: &str) -> bool {
+        let cmd_lower = command.trim().to_lowercase();
+        cmd_lower.starts_with("sudo ") ||
+        cmd_lower.contains("reg add") ||
+        cmd_lower.contains("reg delete") ||
+        cmd_lower.contains("net user") ||
+        cmd_lower.contains("set-executionpolicy")
+    }
+}

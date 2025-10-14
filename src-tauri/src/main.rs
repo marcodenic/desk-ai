@@ -3,8 +3,13 @@
 mod backend;
 
 use backend::{BackendConfig, BackendState};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, menu::{MenuBuilder, MenuItemBuilder}, tray::TrayIconBuilder, PhysicalPosition, PhysicalSize};
+
+// Platform-specific imports for tray icon events (Linux doesn't support click events)
+#[cfg(not(target_os = "linux"))]
+use tauri::tray::{TrayIconEvent, MouseButtonState};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 /// Log macro that only outputs in debug builds
 macro_rules! log_debug {
@@ -186,12 +191,197 @@ async fn open_log_file() -> Result<(), String> {
   Ok(())
 }
 
+#[tauri::command]
+async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
+  if let Some(window) = app.get_webview_window("main") {
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+    Ok(())
+  } else {
+    Err("Main window not found".to_string())
+  }
+}
+
+#[tauri::command]
+async fn hide_main_window(app: tauri::AppHandle) -> Result<(), String> {
+  if let Some(window) = app.get_webview_window("main") {
+    window.hide().map_err(|e| e.to_string())?;
+    Ok(())
+  } else {
+    Err("Main window not found".to_string())
+  }
+}
+
+#[tauri::command]
+async fn toggle_window_mode(app: tauri::AppHandle, popup_mode: bool) -> Result<(), String> {
+  if let Some(window) = app.get_webview_window("main") {
+    if popup_mode {
+      // Popup mode: smaller window near taskbar
+      window.set_size(PhysicalSize::new(400, 600)).map_err(|e| e.to_string())?;
+      window.set_resizable(false).map_err(|e| e.to_string())?;
+      window.set_decorations(false).map_err(|e| e.to_string())?;
+      window.set_always_on_top(true).map_err(|e| e.to_string())?;
+      
+      // Position near taskbar (bottom-right corner)
+      if let Ok(monitor) = window.current_monitor() {
+        if let Some(monitor) = monitor {
+          let screen_size = monitor.size();
+          let window_size = window.outer_size().map_err(|e| e.to_string())?;
+          
+          // Position 10px from right edge and 50px from bottom (above taskbar)
+          let x = screen_size.width as i32 - window_size.width as i32 - 10;
+          let y = screen_size.height as i32 - window_size.height as i32 - 50;
+          
+          window.set_position(PhysicalPosition::new(x, y)).map_err(|e| e.to_string())?;
+        }
+      }
+    } else {
+      // Normal mode: larger resizable window
+      window.set_size(PhysicalSize::new(1100, 720)).map_err(|e| e.to_string())?;
+      window.set_resizable(true).map_err(|e| e.to_string())?;
+      window.set_decorations(true).map_err(|e| e.to_string())?;
+      window.set_always_on_top(false).map_err(|e| e.to_string())?;
+      window.center().map_err(|e| e.to_string())?;
+    }
+    
+    window.emit("window-mode-changed", popup_mode).map_err(|e| e.to_string())?;
+    Ok(())
+  } else {
+    Err("Main window not found".to_string())
+  }
+}
+
 fn main() {
   log_info!("Desk AI starting...");
   
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_http::init())
+    .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    .setup(|app| {
+      // Setup system tray - cross-platform approach
+      // Linux: Uses menu for all interactions (libappindicator doesn't support left-click events)
+      // Windows/macOS: Left-click toggles popup, right-click shows menu
+      let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+      let toggle = MenuItemBuilder::with_id("toggle", "Show/Hide Desk AI").build(app)?;
+      let menu = MenuBuilder::new(app).items(&[&toggle, &quit]).build()?;
+      
+      let _tray = TrayIconBuilder::new()
+        .icon(app.default_window_icon().unwrap().clone())
+        .menu(&menu)
+        .tooltip("Desk AI - Click to toggle")
+        // On Windows/macOS: prevent left-click from opening menu (use for toggle instead)
+        // On Linux: this has no effect; left-click events are not delivered by libappindicator
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| {
+          match event.id.as_ref() {
+            "toggle" => {
+              // Toggle window via menu (works on all platforms, essential for Linux)
+              if let Some(window) = app.get_webview_window("main") {
+                let is_visible = window.is_visible().unwrap_or(false);
+                
+                if is_visible {
+                  let _ = window.hide();
+                } else {
+                  // Show in popup mode near tray icon
+                  let _ = window.set_size(PhysicalSize::new(400, 600));
+                  let _ = window.set_resizable(false);
+                  let _ = window.set_decorations(false);
+                  let _ = window.set_always_on_top(true);
+                  
+                  // Position near bottom-right (taskbar)
+                  if let Ok(monitor) = window.current_monitor() {
+                    if let Some(monitor) = monitor {
+                      let screen_size = monitor.size();
+                      let x = screen_size.width as i32 - 410;
+                      let y = screen_size.height as i32 - 650;
+                      let _ = window.set_position(PhysicalPosition::new(x, y));
+                    }
+                  }
+                  
+                  let _ = window.show();
+                  let _ = window.set_focus();
+                  let _ = window.emit("window-mode-changed", true);
+                }
+              }
+            }
+            "quit" => {
+              log_info!("Quit requested from tray menu");
+              let app_handle = app.clone();
+              tauri::async_runtime::spawn(async move {
+                let state = app_handle.state::<BackendState>();
+                let _ = backend::shutdown_backend(state).await;
+                std::process::exit(0);
+              });
+            }
+            _ => {}
+          }
+        })
+        .on_tray_icon_event(move |_tray, _event| {
+          // On Windows/macOS: left-click toggles popup window
+          // On Linux: this event won't fire (libappindicator doesn't deliver left-clicks)
+          #[cfg(not(target_os = "linux"))]
+          match _event {
+            TrayIconEvent::Click { button_state: MouseButtonState::Up, .. } => {
+              let app = _tray.app_handle();
+              if let Some(window) = app.get_webview_window("main") {
+                let is_visible = window.is_visible().unwrap_or(false);
+                
+                if is_visible {
+                  let _ = window.hide();
+                } else {
+                  // Show in popup mode near tray icon
+                  let _ = window.set_size(PhysicalSize::new(400, 600));
+                  let _ = window.set_resizable(false);
+                  let _ = window.set_decorations(false);
+                  let _ = window.set_always_on_top(true);
+                  
+                  // Position near bottom-right (taskbar)
+                  if let Ok(monitor) = window.current_monitor() {
+                    if let Some(monitor) = monitor {
+                      let screen_size = monitor.size();
+                      let x = screen_size.width as i32 - 410;
+                      let y = screen_size.height as i32 - 650;
+                      let _ = window.set_position(PhysicalPosition::new(x, y));
+                    }
+                  }
+                  
+                  let _ = window.show();
+                  let _ = window.set_focus();
+                  let _ = window.emit("window-mode-changed", true);
+                }
+              }
+            }
+            _ => {}
+          }
+        })
+        .build(app)?;
+
+      // Register global shortcut (Ctrl+Shift+Space or Cmd+Shift+Space)
+      let app_handle = app.handle().clone();
+      app.global_shortcut().on_shortcut("CommandOrControl+Shift+Space", move |_app, _shortcut, _event| {
+        if let Some(window) = app_handle.get_webview_window("main") {
+          if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+          } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+            // Emit event to focus input field
+            let _ = window.emit("focus-input", ());
+          }
+        }
+      })?;
+      
+      // Try to register the shortcut, ignore if already registered
+      if let Err(e) = app.global_shortcut().register("CommandOrControl+Shift+Space") {
+        log_info!("Global shortcut already registered or failed to register: {}", e);
+      } else {
+        log_info!("Global shortcut registered successfully");
+      }
+      
+      log_info!("System tray initialized");
+      Ok(())
+    })
     .manage(BackendState::new())
     .invoke_handler(tauri::generate_handler![
       start_backend,
@@ -202,16 +392,16 @@ fn main() {
       kill_command,
       select_working_directory,
       get_log_path,
-      open_log_file
+      open_log_file,
+      show_main_window,
+      hide_main_window,
+      toggle_window_mode
     ])
     .on_window_event(|window, event| {
-      if let tauri::WindowEvent::CloseRequested { .. } = event {
-        log_info!("Window close requested, shutting down backend");
-        let app_handle = window.app_handle().clone();
-        tauri::async_runtime::spawn(async move {
-          let state = app_handle.state::<BackendState>();
-          let _ = backend::shutdown_backend(state).await;
-        });
+      if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+        log_info!("Window close requested, hiding window instead of closing");
+        window.hide().unwrap();
+        api.prevent_close();
       }
     })
     .run(tauri::generate_context!())

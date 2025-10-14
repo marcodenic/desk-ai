@@ -95,6 +95,15 @@ You'll need an API key from one of these providers:
 
 ### 4. Start Using It!
 
+**System Tray Icon**
+- The app includes a system tray icon for quick access
+- **Windows/macOS**: Left-click to toggle popup window, right-click for menu
+- **Linux**: Click for menu with "Show/Hide Desk AI" and "Quit" options
+  - ⚠️ **Linux users**: See [Linux Tray Setup Guide](LINUX_TRAY_SETUP.md) for desktop environment requirements
+
+**Keyboard Shortcut**
+- Press `Ctrl+Shift+Space` (Windows/Linux) or `Cmd+Shift+Space` (macOS) to toggle the window anywhere
+
 Try asking:
 
 - _"Show me all Python files in this directory"_
