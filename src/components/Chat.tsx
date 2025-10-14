@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 
-import type { ApprovalRequest, BackendStatus, ChatMessage } from "../types";
+import type { ApprovalRequest, BackendStatus, ChatMessage, TerminalSession } from "../types";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Badge, type BadgeProps } from "./ui/badge";
@@ -31,6 +31,8 @@ interface ChatProps {
   onToggleAutoApprove: () => void;
   allowSystemWide: boolean;
   onToggleSystemWide: () => void;
+  terminalSessions: TerminalSession[];
+  showCommandOutput: boolean;
 }
 
 function Chat({
@@ -50,6 +52,8 @@ function Chat({
   onToggleAutoApprove,
   allowSystemWide,
   onToggleSystemWide,
+  terminalSessions,
+  showCommandOutput,
 }: ChatProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -250,7 +254,12 @@ function Chat({
             >
               {messages.length === 0 && !approvalRequest && !thinking && <EmptyState />}
               {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
+                <MessageBubble 
+                  key={message.id} 
+                  message={message} 
+                  terminalSessions={terminalSessions}
+                  showCommandOutput={showCommandOutput}
+                />
               ))}
               {thinking && <ThinkingBubble />}
               {approvalRequest && (
@@ -342,9 +351,11 @@ function ControlButton({ active, onClick, icon: Icon, tooltip, label }: ControlB
 
 interface MessageProps {
   message: ChatMessage;
+  terminalSessions: TerminalSession[];
+  showCommandOutput: boolean;
 }
 
-function MessageBubble({ message }: MessageProps) {
+function MessageBubble({ message, terminalSessions, showCommandOutput }: MessageProps) {
   const isUser = message.role === "user";
   const isTool = message.role === "tool";
   const timestamp = new Date(message.createdAt).toLocaleTimeString();
@@ -368,26 +379,57 @@ function MessageBubble({ message }: MessageProps) {
       const isCompleted = message.toolStatus === "completed";
       const isFailed = message.toolStatus === "failed";
       
+      // Find the corresponding terminal session
+      const session = message.sessionId 
+        ? terminalSessions.find(s => s.sessionId === message.sessionId)
+        : null;
+      
       return (
-        <div className="flex items-start gap-2.5 py-1.5">
-          <div className={cn(
-            "flex items-center gap-2 py-1.5 px-3 rounded-full border shrink-0",
-            isCompleted && "bg-green-500/10 border-green-500/30",
-            isFailed && "bg-red-500/10 border-red-500/30",
-            !isCompleted && !isFailed && "bg-yellow-500/10 border-yellow-500/30"
-          )}>
-            <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-xs text-muted-foreground">run_shell</span>
-            <span className={cn(
-              "text-xs shrink-0",
-              isCompleted && "text-green-500",
-              isFailed && "text-red-500",
-              !isCompleted && !isFailed && "text-yellow-500"
+        <div className="flex flex-col gap-2 py-1.5">
+          <div className="flex items-start gap-2.5">
+            <div className={cn(
+              "flex items-center gap-2 py-1.5 px-3 rounded-full border shrink-0",
+              isCompleted && "bg-green-500/10 border-green-500/30",
+              isFailed && "bg-red-500/10 border-red-500/30",
+              !isCompleted && !isFailed && "bg-yellow-500/10 border-yellow-500/30"
             )}>
-              {statusIcon}
-            </span>
+              <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground">run_shell</span>
+              <span className={cn(
+                "text-xs shrink-0",
+                isCompleted && "text-green-500",
+                isFailed && "text-red-500",
+                !isCompleted && !isFailed && "text-yellow-500"
+              )}>
+                {statusIcon}
+              </span>
+            </div>
+            <code className="font-mono text-xs text-muted-foreground pt-2">$ {command}</code>
           </div>
-          <code className="font-mono text-xs text-muted-foreground pt-2">$ {command}</code>
+          
+          {/* Display terminal output if available and enabled */}
+          {showCommandOutput && session && session.output.length > 0 && (
+            <div className="ml-0 mt-1 rounded-md bg-muted/30 border border-muted-foreground/20 p-3 font-mono text-xs overflow-x-auto">
+              {session.output.map((chunk, idx) => (
+                <span
+                  key={idx}
+                  className={cn(
+                    chunk.stream === "stderr" && "text-red-400"
+                  )}
+                >
+                  {chunk.text}
+                </span>
+              ))}
+              {session.exitCode !== null && (
+                <div className={cn(
+                  "mt-2 pt-2 border-t border-muted-foreground/20 text-xs",
+                  session.exitCode === 0 ? "text-green-500" : "text-red-500"
+                )}>
+                  Exit code: {session.exitCode}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       );
     }

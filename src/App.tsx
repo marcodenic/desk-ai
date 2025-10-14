@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS: Settings = {
   showTerminalOnCommand: true,
   autoApproveAll: false,
   allowSystemWide: false,
+  showCommandOutput: true,
 };
 
 const SETTINGS_STORAGE_KEY = "desk-ai::settings";
@@ -93,6 +94,7 @@ function saveSettings(settings: Settings): void {
     showTerminalOnCommand: settings.showTerminalOnCommand,
     autoApproveAll: settings.autoApproveAll,
     allowSystemWide: settings.allowSystemWide,
+    showCommandOutput: settings.showCommandOutput,
   };
 
   window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
@@ -239,6 +241,24 @@ function App() {
         exitCode: null,
       },
     ]);
+
+    // Link the session to the most recent run_shell tool message
+    setMessages((current) => {
+      const reversed = [...current].reverse();
+      const toolMessageIndex = reversed.findIndex(
+        (msg) => msg.role === "tool" && msg.toolName === "run_shell" && !msg.sessionId
+      );
+      
+      if (toolMessageIndex === -1) return current;
+      
+      const actualIndex = current.length - 1 - toolMessageIndex;
+      const updated = [...current];
+      updated[actualIndex] = {
+        ...updated[actualIndex],
+        sessionId: payload.sessionId,
+      };
+      return updated;
+    });
 
     if (settingsRef.current.showTerminalOnCommand) {
       setTerminalOpen(true);
@@ -668,6 +688,8 @@ function App() {
           onToggleSystemWide={() =>
             setSettings((prev) => ({ ...prev, allowSystemWide: !prev.allowSystemWide }))
           }
+          terminalSessions={terminalSessions}
+          showCommandOutput={settings.showCommandOutput}
         />
       </div>
     </div>

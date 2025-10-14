@@ -19,6 +19,7 @@ export interface Settings {
   autoApproveAll: boolean;
   showTerminalOnCommand: boolean;
   allowSystemWide: boolean;
+  showCommandOutput: boolean;
 }
 
 export type BackendStatus = "idle" | "starting" | "ready" | "error";
@@ -35,6 +36,7 @@ export interface ChatMessage {
   toolName?: string;
   toolArgs?: Record<string, any>;
   toolStatus?: "pending" | "executing" | "completed" | "failed";
+  sessionId?: string; // Link to terminal session for shell commands
 }
 
 export type ToolAction = "shell" | "read" | "write" | "delete" | "list";

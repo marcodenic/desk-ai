@@ -304,6 +304,11 @@ function SettingsPanel({
                   checked={settings.confirmShell}
                   onCheckedChange={(value) => onChange({ confirmShell: value })}
                 />
+                <ToggleRow
+                  label="Show command output in chat"
+                  checked={settings.showCommandOutput}
+                  onCheckedChange={(value) => onChange({ showCommandOutput: value })}
+                />
               </div>
             )}
           </div>
