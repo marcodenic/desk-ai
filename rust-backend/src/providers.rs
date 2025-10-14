@@ -14,6 +14,9 @@ use async_openai::{
 use futures::StreamExt;
 use serde_json::json;
 
+/// Maximum number of conversation history messages to include in API requests
+const MAX_HISTORY_MESSAGES: usize = 20;
+
 pub struct OpenAIProvider {
     api_key: String,
     model: String,
@@ -54,9 +57,8 @@ impl OpenAIProvider {
         let history_len = history.len();
 
         // Keep last N messages to avoid context length issues (e.g., last 20 messages = 10 exchanges)
-        let max_history_messages = 20;
-        let start_idx = if history_len > max_history_messages + 1 {
-            history_len - max_history_messages - 1 // -1 to exclude current user message
+        let start_idx = if history_len > MAX_HISTORY_MESSAGES + 1 {
+            history_len - MAX_HISTORY_MESSAGES - 1 // -1 to exclude current user message
         } else {
             0
         };
@@ -383,9 +385,8 @@ impl AnthropicProvider {
         let history_len = history.len();
 
         // Keep last N messages to avoid context length issues
-        let max_history_messages = 20;
-        let start_idx = if history_len > max_history_messages + 1 {
-            history_len - max_history_messages - 1
+        let start_idx = if history_len > MAX_HISTORY_MESSAGES + 1 {
+            history_len - MAX_HISTORY_MESSAGES - 1
         } else {
             0
         };
