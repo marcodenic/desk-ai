@@ -7,3 +7,5 @@ Issues I would like to fix:
 - I would like to add a system tray icon that the user can tap to show the app in a smaller pop-up variation of the UX
 
 - I would like to add a keyboard shortcut that shows desktop AI and selects the input so the user can start typing a query immediately. maybe we even have a special, minimal UX that shows up when the user accesses the app via shortcut.
+
+- I would like to add more tests to the codebase so that we avoid breaking things in the future as we make changes.

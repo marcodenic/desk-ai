@@ -8,24 +8,27 @@ This document tracks code quality issues identified for future refactoring. Thes
 
 **Priority:** High  
 **Location:** `src-tauri/src/backend.rs`, `src-tauri/src/main.rs`, frontend components
+**Status:** ✅ **RESOLVED**
 
 **Issue:**
 - 38+ `eprintln!` debug statements scattered throughout Tauri backend
 - Multiple `console.log` statements in frontend (Chat.tsx, App.tsx, SettingsPanel.tsx)
 - Debug logs are hardcoded in production code instead of using proper logging levels/framework
 
-**Solution:**
-- Implement proper logging framework (e.g., `env_logger` or `tracing` for Rust)
-- Use log levels (debug, info, warn, error) appropriately
-- Remove or gate debug logs behind feature flags
-- For frontend, implement proper logger with environment-based levels
+**Solution Implemented:**
+- Created logging macros in src-tauri:
+  - `log_debug!()` - Only outputs in debug builds (controlled by `#[cfg(debug_assertions)]`)
+  - `log_info!()` - Always outputs important events (e.g., backend start, config updates)
+  - `log_error!()` - Always outputs errors
+- All logs go to stderr, which is captured by the rust-backend logger and written to log file
+- Removed excessive frontend console.log statements, kept only error logging
+- Users can access logs via "Open Log File" button in settings
 
-**Files Affected:**
-- `src-tauri/src/backend.rs` (38 instances)
-- `src-tauri/src/main.rs` (6 instances)
-- `src/components/Chat.tsx`
-- `src/App.tsx`
-- `src/components/SettingsPanel.tsx`
+**Benefits:**
+- Production builds are less verbose but still log important events
+- Debug builds show detailed tracing for development
+- All logs are captured in the log file for user feedback/debugging
+- Consistent logging approach across the codebase
 
 ---
 

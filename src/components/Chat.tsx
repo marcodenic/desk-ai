@@ -83,10 +83,8 @@ function Chat({
     if (!autoScroll) return;
     const viewport = viewportRef.current;
     if (!viewport) {
-      console.log("No viewport ref found");
       return;
     }
-    console.log("Auto-scrolling to bottom");
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
   }, [messages, thinking, approvalRequest, autoScroll]);
 
@@ -94,17 +92,12 @@ function Chat({
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) {
-      console.log("No viewport for scroll listener");
       return;
     }
-
-    console.log("Setting up scroll listener on viewport", viewport);
 
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = viewport;
       const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-      
-      console.log("Scroll detected:", { scrollTop, scrollHeight, clientHeight, isAtBottom });
       
       setShowScrollButton(!isAtBottom);
       setAutoScroll(isAtBottom);

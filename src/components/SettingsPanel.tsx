@@ -12,6 +12,9 @@ import { Switch } from "./ui/switch";
 import { Badge } from "./ui/badge";
 import { ScrollArea } from "./ui/scroll-area";
 
+/// API endpoint for fetching available AI models
+const MODELS_API_URL = "https://models.dev/api.json";
+
 interface SettingsPanelProps {
   settings: Settings;
   backendStatus: BackendStatus;
@@ -43,7 +46,7 @@ interface ProviderData {
 }
 
 async function fetchModels(): Promise<Record<Provider, string[]>> {
-  const response = await tauriFetch("https://models.dev/api.json", {
+  const response = await tauriFetch(MODELS_API_URL, {
     method: "GET",
   });
 

@@ -11,6 +11,15 @@ use tokio::process::Command;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
+/// Maximum characters to display in tool output preview before truncation
+const TOOL_OUTPUT_PREVIEW_LENGTH: usize = 200;
+
+/// Default timeout for shell commands in seconds
+const DEFAULT_SHELL_TIMEOUT_SECS: u64 = 120;
+
+/// Maximum characters in shell command output (last N chars if exceeded)
+const SHELL_OUTPUT_MAX_LENGTH: usize = 6000;
+
 pub struct ToolExecutor {
     config: BackendConfig,
     bridge: BridgeRef,
@@ -55,10 +64,8 @@ impl ToolExecutor {
                     .await;
                 return Ok(result);
             }
-            // Apply overrides if provided
-            if let Some(_overrides) = approved.overrides {
-                // TODO: Apply overrides to args
-            }
+            // Note: Override functionality is not currently implemented in the UI
+            // If needed in the future, approved.overrides can be used to modify args
         }
 
         // Execute the tool
@@ -75,8 +82,8 @@ impl ToolExecutor {
         match result {
             Ok(output) => {
                 // Emit tool call end
-                let truncated = if output.len() > 200 {
-                    format!("{}...", &output[..200])
+                let truncated = if output.len() > TOOL_OUTPUT_PREVIEW_LENGTH {
+                    format!("{}...", &output[..TOOL_OUTPUT_PREVIEW_LENGTH])
                 } else {
                     output.clone()
                 };
@@ -239,7 +246,7 @@ impl ToolExecutor {
             .command
             .as_ref()
             .ok_or_else(|| anyhow!("Shell command missing"))?;
-        let timeout = args.timeout.unwrap_or(120);
+        let timeout = args.timeout.unwrap_or(DEFAULT_SHELL_TIMEOUT_SECS);
         let session_id = Uuid::new_v4().to_string();
 
         // Check if elevated privileges are required
@@ -364,8 +371,8 @@ impl ToolExecutor {
         let combined_str = combined.join("");
 
         // Truncate if too long
-        let result = if combined_str.len() > 6000 {
-            combined_str[combined_str.len() - 6000..].to_string()
+        let result = if combined_str.len() > SHELL_OUTPUT_MAX_LENGTH {
+            combined_str[combined_str.len() - SHELL_OUTPUT_MAX_LENGTH..].to_string()
         } else {
             combined_str
         };

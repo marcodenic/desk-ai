@@ -35,9 +35,23 @@ export interface ChatMessage {
   streaming?: boolean;
   createdAt: string;
   toolName?: string;
-  toolArgs?: Record<string, any>;
+  toolArgs?: ToolCallArguments;
   toolStatus?: "pending" | "executing" | "completed" | "failed";
   sessionId?: string; // Link to terminal session for shell commands
+}
+
+export interface ToolCallArguments {
+  command?: string;
+  path?: string;
+  content?: string;
+  timeout?: number;
+  recursive?: boolean;
+  query?: string;
+  file_pattern?: string;
+  regex?: boolean;
+  case_sensitive?: boolean;
+  max_results?: number;
+  max_bytes?: number;
 }
 
 export type ToolAction = "shell" | "read" | "write" | "delete" | "list";
@@ -104,7 +118,7 @@ export interface ToolCallStartEvent {
   type: "tool_call_start";
   toolCallId: string;
   name: string;
-  arguments: Record<string, any>;
+  arguments: ToolCallArguments;
   promptId: string;
 }
 

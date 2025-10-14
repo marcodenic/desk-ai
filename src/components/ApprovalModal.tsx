@@ -14,12 +14,10 @@ function ApprovalModal({ request, busy, onApprove, onReject }: ApprovalModalProp
   }
 
   const handleApprove = () => {
-    console.log("Approve clicked", request);
     onApprove(request);
   };
 
   const handleReject = () => {
-    console.log("Reject clicked", request);
     onReject(request);
   };
 

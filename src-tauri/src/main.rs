@@ -6,25 +6,47 @@ use backend::{BackendConfig, BackendState};
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
+/// Log macro that only outputs in debug builds
+macro_rules! log_debug {
+  ($($arg:tt)*) => {
+    #[cfg(debug_assertions)]
+    eprintln!("[TAURI MAIN] {}", format!($($arg)*));
+  };
+}
+
+/// Log macro for important info that should always be logged
+macro_rules! log_info {
+  ($($arg:tt)*) => {
+    eprintln!("[TAURI MAIN] {}", format!($($arg)*));
+  };
+}
+
+/// Log macro for errors that should always be logged
+macro_rules! log_error {
+  ($($arg:tt)*) => {
+    eprintln!("[TAURI MAIN ERROR] {}", format!($($arg)*));
+  };
+}
+
 #[tauri::command]
 async fn start_backend(
   app: tauri::AppHandle,
   state: tauri::State<'_, BackendState>,
   config: BackendConfig,
 ) -> Result<(), String> {
-  eprintln!("[COMMAND] start_backend called");
-  eprintln!("[COMMAND] Config: {:?}", config);
+  log_info!("start_backend command called");
+  log_debug!("Config: provider={:?}, model={}, workdir={}", config.provider, config.model, config.workdir.display());
   
   let result = backend::start_backend(app.clone(), state, config).await;
   
   if let Err(ref err) = result {
-    eprintln!("[COMMAND ERROR] Failed to start backend: {}", err);
-    if let Err(e) = app.emit("backend://error", serde_json::json!({
+    log_error!("Failed to start backend: {}", err);
+    let _ = app.emit("backend://error", serde_json::json!({
       "type": "error",
       "message": format!("Failed to start backend: {}", err)
-    })) {
-      eprintln!("[COMMAND ERROR] Failed to emit error event: {}", e);
-    }
+    }));
+  } else {
+    log_info!("Backend started successfully");
   }
   
   result.map_err(|err| err.to_string())
@@ -35,7 +57,7 @@ async fn update_backend_config(
   state: tauri::State<'_, BackendState>,
   config: BackendConfig,
 ) -> Result<(), String> {
-  eprintln!("[COMMAND] update_backend_config called");
+  log_info!("update_backend_config command called");
   backend::update_config(state, config)
     .await
     .map_err(|err| err.to_string())
@@ -165,6 +187,8 @@ async fn open_log_file() -> Result<(), String> {
 }
 
 fn main() {
+  log_info!("Desk AI starting...");
+  
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_http::init())
@@ -182,6 +206,7 @@ fn main() {
     ])
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::CloseRequested { .. } = event {
+        log_info!("Window close requested, shutting down backend");
         let app_handle = window.app_handle().clone();
         tauri::async_runtime::spawn(async move {
           let state = app_handle.state::<BackendState>();
@@ -190,5 +215,8 @@ fn main() {
       }
     })
     .run(tauri::generate_context!())
-    .expect("error while running Desk AI");
+    .unwrap_or_else(|err| {
+      log_error!("Fatal error running Desk AI: {}", err);
+      std::process::exit(1);
+    });
 }

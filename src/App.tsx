@@ -17,6 +17,7 @@ import type {
   ToolRequestPayload,
   ToolCallStartEvent,
   ToolCallEndEvent,
+  ToolCallArguments,
 } from "./types";
 import { Button } from "./components/ui/button";
 import { cn } from "./lib/utils";
@@ -38,7 +39,13 @@ const DEFAULT_SETTINGS: Settings = {
 
 const SETTINGS_STORAGE_KEY = "desk-ai::settings";
 
-function formatToolCall(name: string, args: Record<string, any>): string {
+/// Timeout for settings save operation in milliseconds
+const SETTINGS_SAVE_TIMEOUT_MS = 5000;
+
+/// Delay before processing config changes in milliseconds
+const CONFIG_PROCESSING_DELAY_MS = 100;
+
+function formatToolCall(name: string, args: ToolCallArguments): string {
   const argParts: string[] = [];
   
   if (name === "run_shell" && args.command) {
@@ -47,7 +54,7 @@ function formatToolCall(name: string, args: Record<string, any>): string {
     return `Reading file: ${args.path}`;
   } else if (name === "write_file" && args.path) {
     return `Writing file: ${args.path}`;
-  } else if (name === "list_directory" && args.path) {
+  } else if (name === "list_directory") {
     return `Listing directory: ${args.path || "."}`;
   } else if (name === "delete_path" && args.path) {
     return `Deleting: ${args.path}`;
@@ -161,8 +168,6 @@ function App() {
       await register<ToolCallEndEvent>("backend://tool_call_end", handleToolCallEnd);
       await register<BackendEvent>("backend://stderr", handleBackendStderr);
       await register<BackendEvent>("backend://exit", handleBackendExit);
-      
-      console.log("[App] Event listeners registered");
     }
 
     setupListeners().catch((error) => {
@@ -181,17 +186,14 @@ function App() {
     if (hasValidSettings && backendStatus === "idle") {
       // Small delay to ensure event listeners are registered first
       const timer = setTimeout(() => {
-        console.log("[App] Auto-starting backend with saved settings");
         handleSaveSettings();
-      }, 100);
+      }, CONFIG_PROCESSING_DELAY_MS);
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount with initial values
 
   const handleStatusEvent = useCallback((payload: StatusEvent) => {
-    console.log("[DEBUG App.tsx] handleStatusEvent called with:", payload);
-    
     // Clear the safety timeout if it exists
     const timeoutId = (window as any).__savingConfigTimeout;
     if (timeoutId) {
@@ -201,18 +203,15 @@ function App() {
     
     switch (payload.status) {
       case "starting":
-        console.log("[DEBUG App.tsx] Setting status to starting");
         setBackendStatus("starting");
         break;
       case "ready":
-        console.log("[DEBUG App.tsx] Setting status to ready, clearing savingConfig");
         setBackendStatus("ready");
         setSettingsPanelOpen(false); // Hide settings when backend is ready
         setSavingConfig(false); // Clear saving state when backend is ready
         break;
       case "error":
       default:
-        console.log("[DEBUG App.tsx] Setting status to error");
         setBackendStatus("error");
         setSavingConfig(false); // Clear saving state on error
         break;
@@ -457,7 +456,6 @@ function App() {
   const handleBackendStderr = useCallback((payload: BackendEvent) => {
     if (payload && typeof payload === "object" && "type" in payload && payload.type === "stderr") {
       setBackendStatusMessage(payload.message);
-      console.warn("[backend stderr]", payload.message);
     }
   }, []);
 
@@ -496,11 +494,10 @@ function App() {
     setBackendStatus("starting");
     setBackendStatusMessage("Configuring backend…");
 
-    // Safety timeout: clear saving state after 5 seconds if no status event received
+    // Safety timeout: clear saving state after timeout if no status event received
     const timeoutId = setTimeout(() => {
-      console.warn("[App] Status event timeout - clearing savingConfig state");
       setSavingConfig(false);
-    }, 5000);
+    }, SETTINGS_SAVE_TIMEOUT_MS);
 
     try {
       // Check if backend is running by checking status
@@ -625,8 +622,6 @@ function App() {
           allowSystemWide: settings.allowSystemWide,
         },
       });
-      
-      console.log("Assistant stopped and backend restarted");
     } catch (error) {
       console.error("Failed to stop assistant:", error);
       setBackendStatus("error");
@@ -636,7 +631,6 @@ function App() {
 
   const resolveApproval = useCallback(
     async (request: ApprovalRequest, approved: boolean) => {
-      console.log("=== resolveApproval called ===", { request, approved });
       try {
         await invoke("approve_tool", {
           requestId: request.requestId,
@@ -653,7 +647,6 @@ function App() {
   );
 
   const handleApproveFromChat = useCallback(() => {
-    console.log("=== handleApproveFromChat called ===");
     const request = approvals[0];
     if (request) {
       resolveApproval(request, true);
@@ -661,7 +654,6 @@ function App() {
   }, [approvals, resolveApproval]);
 
   const handleRejectFromChat = useCallback(() => {
-    console.log("=== handleRejectFromChat called ===");
     const request = approvals[0];
     if (request) {
       resolveApproval(request, false);
