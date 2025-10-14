@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS: Settings = {
   autoApproveAll: false,
   allowSystemWide: false,
   showCommandOutput: true,
+  allowElevatedCommands: false,
 };
 
 const SETTINGS_STORAGE_KEY = "desk-ai::settings";
@@ -95,6 +96,7 @@ function saveSettings(settings: Settings): void {
     autoApproveAll: settings.autoApproveAll,
     allowSystemWide: settings.allowSystemWide,
     showCommandOutput: settings.showCommandOutput,
+    allowElevatedCommands: settings.allowElevatedCommands,
   };
 
   window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
@@ -488,6 +490,8 @@ function App() {
             confirmShell: settings.confirmShell,
             showTerminalOnCommand: settings.showTerminalOnCommand,
             allowSystemWide: settings.allowSystemWide,
+            showCommandOutput: settings.showCommandOutput,
+            allowElevatedCommands: settings.allowElevatedCommands,
           },
         });
         setBackendStatusMessage("Configuration updated");
@@ -504,6 +508,8 @@ function App() {
             confirmShell: settings.confirmShell,
             showTerminalOnCommand: settings.showTerminalOnCommand,
             allowSystemWide: settings.allowSystemWide,
+            showCommandOutput: settings.showCommandOutput,
+            allowElevatedCommands: settings.allowElevatedCommands,
           },
         });
         setBackendStatusMessage("Backend started");

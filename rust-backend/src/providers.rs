@@ -44,7 +44,7 @@ impl OpenAIProvider {
         let mut messages = vec![ChatCompletionRequestMessage::System(
             ChatCompletionRequestSystemMessage {
                 content: async_openai::types::ChatCompletionRequestSystemMessageContent::Text(
-                    get_system_prompt(),
+                    get_system_prompt(config),
                 ),
                 name: None,
             },
@@ -414,7 +414,7 @@ impl AnthropicProvider {
             let request_body = json!({
                 "model": self.model,
                 "max_tokens": 8192,
-                "system": get_system_prompt(),
+                "system": get_system_prompt(config),
                 "messages": messages,
                 "tools": tools,
                 "stream": true

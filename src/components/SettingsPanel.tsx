@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetch as tauriFetch } from "@tauri-apps/api/http";
-import { Loader2, FolderOpen, RefreshCcw, AlertCircle, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
+import { invoke } from "@tauri-apps/api/tauri";
+import { open } from "@tauri-apps/api/shell";
+import { Loader2, FolderOpen, RefreshCcw, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, FileText } from "lucide-react";
 
 import type { BackendStatus, Provider, Settings } from "../types";
 import { Button } from "./ui/button";
@@ -309,6 +311,29 @@ function SettingsPanel({
                   checked={settings.showCommandOutput}
                   onCheckedChange={(value) => onChange({ showCommandOutput: value })}
                 />
+                <ToggleRow
+                  label="Allow elevated commands (sudo/admin)"
+                  description="⚠️ Enables commands that require administrator privileges"
+                  checked={settings.allowElevatedCommands}
+                  onCheckedChange={(value) => onChange({ allowElevatedCommands: value })}
+                />
+                
+                <div className="pt-2 border-t border-border">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const logPath = await invoke<string>("get_log_path");
+                        await open(logPath);
+                      } catch (error) {
+                        console.error("Failed to open log file:", error);
+                      }
+                    }}
+                    className="w-full h-8 gap-1.5 text-xs border-border bg-transparent hover:bg-border/20"
+                  >
+                    <FileText className="h-3.5 w-3.5" /> Open Log File
+                  </Button>
+                </div>
               </div>
             )}
           </div>

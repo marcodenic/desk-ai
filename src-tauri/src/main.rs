@@ -92,6 +92,29 @@ async fn select_working_directory() -> Result<Option<String>, String> {
     .map_err(|_| "Dialog channel dropped unexpectedly".to_string())
 }
 
+#[tauri::command]
+async fn get_log_path() -> Result<String, String> {
+  // Return the log file path (matches the one used in rust-backend)
+  let log_dir = if cfg!(target_os = "windows") {
+    dirs::data_local_dir()
+      .ok_or_else(|| "Could not find local data directory".to_string())?
+      .join("DeskAI")
+      .join("logs")
+  } else if cfg!(target_os = "macos") {
+    dirs::data_dir()
+      .ok_or_else(|| "Could not find data directory".to_string())?
+      .join("DeskAI")
+      .join("logs")
+  } else {
+    dirs::data_local_dir()
+      .ok_or_else(|| "Could not find local data directory".to_string())?
+      .join("desk-ai")
+      .join("logs")
+  };
+
+  Ok(log_dir.join("desk-ai.log").to_string_lossy().to_string())
+}
+
 fn main() {
   tauri::Builder::default()
     .manage(BackendState::new())
@@ -102,7 +125,8 @@ fn main() {
       stop_agent_message,
       approve_tool,
       kill_command,
-      select_working_directory
+      select_working_directory,
+      get_log_path
     ])
     .on_window_event(|event| {
       if let tauri::WindowEvent::CloseRequested { .. } = event.event() {

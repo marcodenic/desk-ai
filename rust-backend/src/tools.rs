@@ -1,3 +1,4 @@
+use crate::logger;
 use crate::ndjson::BridgeRef;
 use crate::types::{ApprovalResponse, BackendConfig, OutgoingEvent, ToolCallArgs};
 use anyhow::{anyhow, Result};
@@ -112,6 +113,33 @@ impl ToolExecutor {
         }
     }
 
+    /// Check if a shell command requires elevated privileges
+    fn requires_elevation(&self, command: &str) -> bool {
+        let cmd_lower = command.trim().to_lowercase();
+        
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: check for commands that typically need admin
+            cmd_lower.starts_with("sudo ") || // WSL/Cygwin
+            cmd_lower.contains("reg add") ||
+            cmd_lower.contains("reg delete") ||
+            cmd_lower.contains("sc.exe") ||
+            cmd_lower.contains("net user") ||
+            cmd_lower.contains("net localgroup") ||
+            cmd_lower.starts_with("runas") ||
+            cmd_lower.contains("set-executionpolicy") ||
+            cmd_lower.contains("install-") // PowerShell install commands
+        }
+        
+        #[cfg(not(target_os = "windows"))]
+        {
+            // Unix-like systems: check for sudo
+            cmd_lower.starts_with("sudo ") ||
+            cmd_lower.starts_with("doas ") || // OpenBSD alternative
+            cmd_lower.starts_with("pkexec ")
+        }
+    }
+
     fn get_approval_reason(&self, name: &str, args: &ToolCallArgs) -> String {
         match name {
             "run_shell" => args.command.clone().unwrap_or_default(),
@@ -171,12 +199,31 @@ impl ToolExecutor {
             _ => action,
         };
 
+        // Check if this is an elevated command
+        let elevated = if action == "run_shell" {
+            if let Some(command) = &args.command {
+                Some(self.requires_elevation(command))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Log elevated command attempts
+        if let Some(true) = elevated {
+            if let Some(command) = &args.command {
+                logger::elevated_command(command, false); // Will log as DENIED initially, approved later
+            }
+        }
+
         // Emit tool request
         self.bridge
             .emit_event(OutgoingEvent::ToolRequest {
                 request_id: request_id.clone(),
                 action: action_map.to_string(),
                 details,
+                elevated,
             })
             .await;
 
@@ -189,6 +236,13 @@ impl ToolExecutor {
 
         eprintln!("[APPROVAL] Got approval result: {:?}", response.approved);
 
+        // Log the approval decision for elevated commands
+        if let Some(true) = elevated {
+            if let Some(command) = &args.command {
+                logger::elevated_command(command, response.approved);
+            }
+        }
+
         Ok(response)
     }
 
@@ -200,6 +254,19 @@ impl ToolExecutor {
         let timeout = args.timeout.unwrap_or(120);
         let session_id = Uuid::new_v4().to_string();
 
+        // Check if elevated privileges are required
+        let is_elevated = self.requires_elevation(command);
+        
+        // If elevated but not allowed, return error
+        if is_elevated && !self.config.allow_elevated_commands {
+            let error_msg = "This command requires elevated privileges, but elevated commands are disabled in settings. Enable 'Allow elevated commands' to run this.";
+            logger::error(&format!("Elevated command blocked: {}", command));
+            return Err(anyhow!(error_msg));
+        }
+
+        // Log the command execution
+        logger::tool_call("run_shell", &format!("cmd={}, elevated={}", command, is_elevated));
+
         // Emit shell start
         self.bridge
             .emit_event(OutgoingEvent::ShellStart {
@@ -210,21 +277,11 @@ impl ToolExecutor {
             })
             .await;
 
-        // Spawn shell command
-        let mut child = if cfg!(target_os = "windows") {
-            Command::new("cmd")
-                .args(["/C", command])
-                .current_dir(&self.config.workdir)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()?
+        // Spawn shell command with or without elevation
+        let mut child = if is_elevated {
+            self.spawn_elevated_command(command).await?
         } else {
-            Command::new("sh")
-                .args(["-c", command])
-                .current_dir(&self.config.workdir)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()?
+            self.spawn_normal_command(command).await?
         };
 
         let stdout = child
@@ -333,6 +390,121 @@ impl ToolExecutor {
         } else {
             result
         })
+    }
+
+    /// Spawn a normal (non-elevated) shell command
+    async fn spawn_normal_command(&self, command: &str) -> Result<tokio::process::Child> {
+        if cfg!(target_os = "windows") {
+            Command::new("cmd")
+                .args(["/C", command])
+                .current_dir(&self.config.workdir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| anyhow!("Failed to spawn command: {}", e))
+        } else {
+            Command::new("sh")
+                .args(["-c", command])
+                .current_dir(&self.config.workdir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| anyhow!("Failed to spawn command: {}", e))
+        }
+    }
+
+    /// Spawn an elevated shell command with platform-specific privilege escalation
+    async fn spawn_elevated_command(&self, command: &str) -> Result<tokio::process::Child> {
+        // Strip sudo/pkexec prefix if present (we'll add our own)
+        let clean_command = command
+            .trim()
+            .trim_start_matches("sudo ")
+            .trim_start_matches("pkexec ")
+            .trim_start_matches("doas ");
+
+        #[cfg(target_os = "linux")]
+        {
+            // Try pkexec first (graphical auth dialog)
+            if Command::new("which")
+                .arg("pkexec")
+                .output()
+                .await
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+            {
+                logger::info("Using pkexec for elevated command");
+                return Command::new("pkexec")
+                    .arg("sh")
+                    .arg("-c")
+                    .arg(clean_command)
+                    .current_dir(&self.config.workdir)
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .map_err(|e| anyhow!("Failed to spawn pkexec: {}", e));
+            }
+
+            // Fallback to sudo
+            logger::info("Using sudo for elevated command");
+            Command::new("sudo")
+                .arg("-S") // Read password from stdin
+                .arg("sh")
+                .arg("-c")
+                .arg(clean_command)
+                .current_dir(&self.config.workdir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .stdin(std::process::Stdio::null()) // No interactive password
+                .spawn()
+                .map_err(|e| anyhow!("Failed to spawn sudo: {}. You may need to configure passwordless sudo or use pkexec.", e))
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            // macOS: Use osascript for graphical authentication
+            logger::info("Using osascript for elevated command");
+            let escaped = clean_command.replace('\\', "\\\\").replace('"', "\\\"");
+            let script = format!(
+                "do shell script \"{}\" with administrator privileges",
+                escaped
+            );
+            
+            Command::new("osascript")
+                .arg("-e")
+                .arg(&script)
+                .current_dir(&self.config.workdir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| anyhow!("Failed to spawn osascript: {}", e))
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: Use PowerShell with Start-Process -Verb RunAs
+            logger::info("Using PowerShell elevation for command");
+            
+            // Create a PowerShell script that runs the command elevated
+            let ps_script = format!(
+                "Start-Process powershell -ArgumentList '-NoProfile','-Command',\"{}\" -Verb RunAs -Wait -WindowStyle Hidden",
+                clean_command.replace('"', "`\"")
+            );
+            
+            Command::new("powershell")
+                .arg("-NoProfile")
+                .arg("-Command")
+                .arg(&ps_script)
+                .current_dir(&self.config.workdir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .map_err(|e| anyhow!("Failed to spawn elevated PowerShell: {}", e))
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        {
+            Err(anyhow!("Elevated commands not supported on this platform"))
+        }
     }
 
     async fn read_file(&self, args: &ToolCallArgs) -> Result<String> {

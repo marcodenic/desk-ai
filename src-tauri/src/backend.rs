@@ -33,6 +33,8 @@ pub struct BackendConfig {
   pub confirm_shell: bool,
   #[serde(default = "default_false")]
   pub allow_system_wide: bool,
+  #[serde(default = "default_false")]
+  pub allow_elevated_commands: bool,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -158,6 +160,8 @@ pub(crate) struct RuntimeConfig<'a> {
   confirm_shell: bool,
   #[serde(rename = "allowSystemWide")]
   allow_system_wide: bool,
+  #[serde(rename = "allowElevatedCommands")]
+  allow_elevated_commands: bool,
 }
 
 #[derive(Serialize)]
@@ -211,6 +215,7 @@ pub async fn start_backend(
     confirm_writes,
     confirm_shell,
     allow_system_wide,
+    allow_elevated_commands,
   } = config;
 
   let workdir = workdir
@@ -232,6 +237,7 @@ pub async fn start_backend(
       confirm_writes,
       confirm_shell,
       allow_system_wide,
+      allow_elevated_commands,
     };
 
     existing_handle
@@ -308,6 +314,7 @@ pub async fn start_backend(
     confirm_writes,
     confirm_shell,
     allow_system_wide,
+    allow_elevated_commands,
   };
 
   handle
@@ -356,6 +363,7 @@ pub async fn update_config(
     confirm_writes: config.confirm_writes,
     confirm_shell: config.confirm_shell,
     allow_system_wide: config.allow_system_wide,
+    allow_elevated_commands: config.allow_elevated_commands,
   };
 
   eprintln!("[DEBUG] Sending config update to running backend");

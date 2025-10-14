@@ -15,6 +15,7 @@ tauri = { version = "1.5", features = [ "http-request", "dialog-open", "window-a
 tokio = { version = "1.38", features = ["macros", "rt-multi-thread", "process", "sync", "time", "io-util"] }
 uuid = { version = "1.8", features = ["serde", "v4"] }
 which = "4.4"
+dirs = "5.0"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

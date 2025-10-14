@@ -20,6 +20,7 @@ export interface Settings {
   showTerminalOnCommand: boolean;
   allowSystemWide: boolean;
   showCommandOutput: boolean;
+  allowElevatedCommands: boolean;
 }
 
 export type BackendStatus = "idle" | "starting" | "ready" | "error";
@@ -50,6 +51,7 @@ export interface ToolRequestPayload {
   description?: string;
   bytes?: number;
   autoApproved?: boolean;
+  elevated?: boolean;
 }
 
 export interface TokenEvent {
@@ -136,6 +138,7 @@ export interface ApprovalRequest {
   description?: string;
   bytes?: number;
   autoApproved?: boolean;
+  elevated?: boolean;
 }
 
 export type TerminalStream = "stdout" | "stderr";
