@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Lucide Bolt icon with semi-transparent dark background -->
+  
+  <!-- Very dark background that blends with system tray -->
+  <rect x="0" y="0" width="32" height="32" fill="#1a1a1a" opacity="0.95"/>
+  
+  <!-- Bolt icon from Lucide (scaled and positioned) -->
+  <g transform="translate(4, 4)">
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" 
+          fill="none" 
+          stroke="#10b981" 
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+    <circle cx="12" cy="12" r="4" 
+            fill="none" 
+            stroke="#10b981" 
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"/>
+  </g>
+</svg>

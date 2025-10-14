@@ -1,7 +1,7 @@
 #!/bin/bash
-# Generate all required icon formats from the simple dot SVG design
+# Generate all required icon formats from the bolt SVG design
 
-ICON="icon-dot.svg"
+ICON="icon-bolt.svg"
 
 if [ ! -f "$ICON" ]; then
     echo "Error: $ICON not found!"
@@ -22,8 +22,8 @@ mkdir -p src-tauri/icons
 
 # Generate PNG files
 echo "Generating PNG files..."
-convert "$ICON" -background none -alpha on -antialias -resize 32x32 PNG32:src-tauri/icons/32x32.png
-convert "$ICON" -background none -alpha on -antialias -resize 128x128 PNG32:src-tauri/icons/128x128.png
+convert "$ICON" -background none -alpha on -resize 32x32 PNG32:src-tauri/icons/32x32.png
+convert "$ICON" -background none -alpha on -resize 128x128 PNG32:src-tauri/icons/128x128.png
 convert "$ICON" -background none -alpha on -resize 256x256 PNG32:src-tauri/icons/128x128@2x.png
 convert "$ICON" -background none -alpha on -resize 512x512 PNG32:src-tauri/icons/icon.png
 convert "$ICON" -background none -alpha on -resize 1024x1024 PNG32:src-tauri/icons/icon@2x.png
