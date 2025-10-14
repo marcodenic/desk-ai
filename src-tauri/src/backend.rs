@@ -214,16 +214,17 @@ pub async fn start_backend(
   state: tauri::State<'_, BackendState>,
   config: BackendConfig,
 ) -> Result<()> {
+  // Validate configuration
+  if config.api_key.trim().is_empty() {
+    return Err(anyhow!("API key cannot be empty"));
+  }
+
   if !config.workdir.exists() {
-    return Err(anyhow!("Selected working directory does not exist."));
+    return Err(anyhow!("The selected working directory does not exist"));
   }
 
   if !config.workdir.is_dir() {
-    return Err(anyhow!("Working directory path must point to a directory."));
-  }
-
-  if config.api_key.trim().is_empty() {
-    return Err(anyhow!("API key must not be empty."));
+    return Err(anyhow!("The working directory path must be a directory"));
   }
 
   let BackendConfig {
@@ -350,21 +351,22 @@ pub async fn update_config(
   state: tauri::State<'_, BackendState>,
   config: BackendConfig,
 ) -> Result<()> {
+  // Validate configuration
+  if config.api_key.trim().is_empty() {
+    return Err(anyhow!("API key cannot be empty"));
+  }
+
   if !config.workdir.exists() {
-    return Err(anyhow!("Selected working directory does not exist."));
+    return Err(anyhow!("The selected working directory does not exist"));
   }
 
   if !config.workdir.is_dir() {
-    return Err(anyhow!("Working directory path must point to a directory."));
-  }
-
-  if config.api_key.trim().is_empty() {
-    return Err(anyhow!("API key must not be empty."));
+    return Err(anyhow!("The working directory path must be a directory"));
   }
 
   let handle = state
     .get()
-    .ok_or_else(|| anyhow!("Backend process is not running. Call start_backend first."))?;
+    .ok_or_else(|| anyhow!("Backend process is not running"))?;
 
   let workdir = config.workdir
     .canonicalize()

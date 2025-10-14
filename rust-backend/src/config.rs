@@ -1,17 +1,21 @@
 use crate::types::BackendConfig;
 use anyhow::{anyhow, Result};
 
+/// Validates backend configuration ensuring all required fields are properly set
 pub fn validate_config(config: &BackendConfig) -> Result<()> {
+    // Validate API key
     if config.api_key.trim().is_empty() {
-        return Err(anyhow!("API key must not be empty"));
+        return Err(anyhow!("API key cannot be empty"));
     }
 
+    // Validate working directory exists
     if !config.workdir.exists() {
-        return Err(anyhow!("Working directory must exist"));
+        return Err(anyhow!("The selected working directory does not exist"));
     }
 
+    // Validate working directory is actually a directory
     if !config.workdir.is_dir() {
-        return Err(anyhow!("Working directory must be a directory"));
+        return Err(anyhow!("The working directory path must be a directory"));
     }
 
     Ok(())

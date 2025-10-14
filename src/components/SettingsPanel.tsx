@@ -94,6 +94,37 @@ function SettingsPanel({
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [connectionExpanded, setConnectionExpanded] = useState(true);
   const [permissionsExpanded, setPermissionsExpanded] = useState(true);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  // Validation function
+  const validateSettings = (settingsToValidate: Settings): Record<string, string> => {
+    const errors: Record<string, string> = {};
+
+    // Validate API key
+    if (!settingsToValidate.apiKey || settingsToValidate.apiKey.trim().length === 0) {
+      errors.apiKey = "API key is required";
+    } else if (settingsToValidate.provider === "openai" && !settingsToValidate.apiKey.startsWith("sk-")) {
+      errors.apiKey = "OpenAI API keys should start with 'sk-'";
+    }
+
+    // Validate working directory
+    if (!settingsToValidate.workdir || settingsToValidate.workdir.trim().length === 0) {
+      errors.workdir = "Working directory is required";
+    }
+
+    // Validate model selection
+    if (!settingsToValidate.model || settingsToValidate.model.trim().length === 0) {
+      errors.model = "Model selection is required";
+    }
+
+    return errors;
+  };
+
+  // Validate on settings change
+  useEffect(() => {
+    const errors = validateSettings(settings);
+    setValidationErrors(errors);
+  }, [settings]);
 
   useEffect(() => {
     let mounted = true;
@@ -152,6 +183,9 @@ function SettingsPanel({
   const modelValue = availableModels.includes(settings.model)
     ? settings.model
     : availableModels[0] ?? settings.model;
+
+  const hasValidationErrors = Object.keys(validationErrors).length > 0;
+  const canSave = !saving && !hasValidationErrors;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-black">
@@ -233,7 +267,7 @@ function SettingsPanel({
                 </div>
               ) : (
                 <Select value={modelValue} onValueChange={(value) => onChange({ model: value })}>
-                  <SelectTrigger id="model" className="h-8 text-xs">
+                  <SelectTrigger id="model" className={`h-8 text-xs ${validationErrors.model ? 'border-red-500' : ''}`}>
                     <SelectValue placeholder="Select model" />
                   </SelectTrigger>
                   <SelectContent className="max-h-60">
@@ -244,6 +278,9 @@ function SettingsPanel({
                     ))}
                   </SelectContent>
                 </Select>
+              )}
+              {validationErrors.model && (
+                <p className="text-xs text-red-500">{validationErrors.model}</p>
               )}
             </div>
 
@@ -258,14 +295,17 @@ function SettingsPanel({
                 onChange={(event) => onChange({ apiKey: event.target.value.trim() })}
                 placeholder={settings.provider === "openai" ? "sk-…" : "sk-ant-…"}
                 autoComplete="off"
-                className="h-8 text-xs font-mono"
+                className={`h-8 text-xs font-mono ${validationErrors.apiKey ? 'border-red-500' : ''}`}
               />
+              {validationErrors.apiKey && (
+                <p className="text-xs text-red-500">{validationErrors.apiKey}</p>
+              )}
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Working Directory</Label>
               <div className="flex gap-2 items-center">
-                <div className="flex-1 flex items-center h-8 truncate rounded border border-border bg-secondary px-2 text-xs text-muted-foreground font-mono">
+                <div className={`flex-1 flex items-center h-8 truncate rounded border bg-secondary px-2 text-xs text-muted-foreground font-mono ${validationErrors.workdir ? 'border-red-500' : 'border-border'}`}>
                   {settings.workdir || "No directory"}
                 </div>
                 <Button
@@ -276,6 +316,9 @@ function SettingsPanel({
                   <FolderOpen className="h-3.5 w-3.5" /> Browse
                 </Button>
               </div>
+              {validationErrors.workdir && (
+                <p className="text-xs text-red-500">{validationErrors.workdir}</p>
+              )}
             </div>
               </div>
             )}
@@ -347,10 +390,20 @@ function SettingsPanel({
       </ScrollArea>
 
       <div className="border-t border-border p-4">
+        {hasValidationErrors && (
+          <div className="mb-3 rounded border border-amber-600 bg-amber-950/50 px-2.5 py-1.5 text-xs text-amber-400">
+            <div className="font-medium mb-1">Please fix the following:</div>
+            <ul className="list-disc list-inside space-y-0.5">
+              {Object.entries(validationErrors).map(([field, error]) => (
+                <li key={field}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <Button 
           onClick={onSave} 
-          disabled={saving}
-          className="w-full h-8 bg-white text-black hover:bg-white/90 font-semibold"
+          disabled={!canSave}
+          className="w-full h-8 bg-white text-black hover:bg-white/90 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? (
             <>
