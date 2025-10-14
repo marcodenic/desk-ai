@@ -50,10 +50,11 @@
           "core:event:allow-emit",
           "core:event:allow-emit-to",
           "http:default",
-          "http:allow-fetch",
           {
-            "identifier": "http:allow-fetch-send",
-            "allow": [{ "url": "https://models.dev/*" }]
+            "identifier": "http:allow-fetch",
+            "allow": [
+              { "url": "https://models.dev/api.json" }
+            ]
           },
           "dialog:default",
           "dialog:allow-open"
