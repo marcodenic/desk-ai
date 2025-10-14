@@ -361,7 +361,39 @@ function MessageBubble({ message }: MessageProps) {
     
     // Extract command from content like "Running: df -h"
     const content = message.content;
-    const commandMatch = content.match(/^(Running|Reading file|Writing file|Listing directory|Deleting): (.+)$/);
+    const commandMatch = content.match(/^Running: (.+)$/);
+    
+    if (commandMatch && message.toolName === "run_shell") {
+      const command = commandMatch[1];
+      const isCompleted = message.toolStatus === "completed";
+      const isFailed = message.toolStatus === "failed";
+      
+      return (
+        <div className="flex items-start gap-2.5 py-1.5">
+          <div className={cn(
+            "flex items-center gap-2 py-1.5 px-3 rounded-full border shrink-0",
+            isCompleted && "bg-green-500/10 border-green-500/30",
+            isFailed && "bg-red-500/10 border-red-500/30",
+            !isCompleted && !isFailed && "bg-yellow-500/10 border-yellow-500/30"
+          )}>
+            <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs text-muted-foreground">run_shell</span>
+            <span className={cn(
+              "text-xs shrink-0",
+              isCompleted && "text-green-500",
+              isFailed && "text-red-500",
+              !isCompleted && !isFailed && "text-yellow-500"
+            )}>
+              {statusIcon}
+            </span>
+          </div>
+          <code className="font-mono text-xs text-muted-foreground pt-2">$ {command}</code>
+        </div>
+      );
+    }
+    
+    // Other tool types
+    const otherMatch = content.match(/^(Reading file|Writing file|Listing directory|Deleting): (.+)$/);
     
     return (
       <div className="flex items-center gap-2.5 py-1.5">
@@ -369,9 +401,9 @@ function MessageBubble({ message }: MessageProps) {
           {message.toolName}
           <span className="opacity-60">{statusIcon}</span>
         </Badge>
-        {commandMatch ? (
+        {otherMatch ? (
           <span className="text-xs text-muted-foreground">
-            {commandMatch[1]}: <code className="font-mono text-xs bg-muted/50 px-1 py-0.5 rounded">{commandMatch[2]}</code>
+            {otherMatch[1]}: <code className="font-mono text-xs bg-muted/50 px-1 py-0.5 rounded">{otherMatch[2]}</code>
           </span>
         ) : (
           <span className="text-xs text-muted-foreground">{content}</span>
