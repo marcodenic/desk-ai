@@ -39,7 +39,19 @@ fi
 
 # Generate ICO file for Windows
 echo "Generating ICO file..."
-convert "$ICON" -background none -alpha on -define icon:auto-resize=256,128,64,48,32,16 src-tauri/icons/icon.ico
+# Create temporary 8-bit PNGs for ICO generation with proper type specification
+TMP_DIR=$(mktemp -d)
+for size in 16 32 48 64 128 256; do
+    # Resize and force to PaletteAlpha type to ensure 8-bit depth
+    convert "$ICON" -background none -alpha on -resize ${size}x${size} \
+            -depth 8 -type PaletteAlpha \
+            ${TMP_DIR}/icon_${size}.png
+done
+# Combine into ICO - note: order matters, smallest to largest
+convert ${TMP_DIR}/icon_16.png ${TMP_DIR}/icon_32.png ${TMP_DIR}/icon_48.png \
+        ${TMP_DIR}/icon_64.png ${TMP_DIR}/icon_128.png ${TMP_DIR}/icon_256.png \
+        src-tauri/icons/icon.ico
+rm -rf ${TMP_DIR}
 
 # Generate ICNS file for macOS (requires png2icns or iconutil)
 echo "Generating ICNS file..."

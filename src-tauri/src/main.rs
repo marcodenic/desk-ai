@@ -395,8 +395,8 @@ fn main() {
           #[cfg(not(target_os = "linux"))]
           match _event {
             TrayIconEvent::Click { button_state: MouseButtonState::Up, .. } => {
-              let app = _tray.app_handle();
-              if let Some(window) = app.get_webview_window("main") {
+              let app_handle = _tray.app_handle().clone();
+              if let Some(window) = app_handle.get_webview_window("main") {
                 let is_visible = window.is_visible().unwrap_or(false);
                 
                 if is_visible {
@@ -406,7 +406,7 @@ fn main() {
                   let mini_mode = MINI_MODE.load(Ordering::SeqCst);
                   
                   tauri::async_runtime::spawn(async move {
-                    if let Some(window) = app.get_webview_window("main") {
+                    if let Some(window) = app_handle.get_webview_window("main") {
                       let _ = apply_window_mode(&window, mini_mode).await;
                       let _ = window.show();
                       let _ = window.set_focus();
