@@ -8,7 +8,6 @@ use std::sync::{Arc, Mutex};
 /// Logger that writes important events to a persistent log file
 pub struct Logger {
     file: Arc<Mutex<std::fs::File>>,
-    path: PathBuf,
 }
 
 impl Logger {
@@ -26,7 +25,6 @@ impl Logger {
 
         Ok(Self {
             file: Arc::new(Mutex::new(file)),
-            path,
         })
     }
 
@@ -55,19 +53,9 @@ impl Logger {
         Ok(log_dir.join("desk-ai.log"))
     }
 
-    /// Get the log file path
-    pub fn path(&self) -> &PathBuf {
-        &self.path
-    }
-
     /// Log a general info message
     pub fn info(&self, message: &str) {
         let _ = self.write_log("INFO", message);
-    }
-
-    /// Log a warning message
-    pub fn warn(&self, message: &str) {
-        let _ = self.write_log("WARN", message);
     }
 
     /// Log an error message
@@ -130,13 +118,6 @@ pub fn get_logger() -> Option<&'static Logger> {
 pub fn info(message: &str) {
     if let Some(logger) = get_logger() {
         logger.info(message);
-    }
-}
-
-/// Log a warning message using the global logger
-pub fn warn(message: &str) {
-    if let Some(logger) = get_logger() {
-        logger.warn(message);
     }
 }
 

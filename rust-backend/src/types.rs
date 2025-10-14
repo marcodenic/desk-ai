@@ -124,13 +124,6 @@ pub enum OutgoingEvent {
 }
 
 #[derive(Debug, Clone)]
-pub struct ApprovalRequest {
-    pub request_id: String,
-    pub action: String,
-    pub details: HashMap<String, serde_json::Value>,
-}
-
-#[derive(Debug, Clone)]
 pub struct ApprovalResponse {
     pub approved: bool,
     pub overrides: Option<serde_json::Value>,

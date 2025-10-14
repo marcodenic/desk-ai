@@ -7,8 +7,7 @@ use async_openai::{
     config::OpenAIConfig,
     types::{
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage,
-        ChatCompletionRequestUserMessage, ChatCompletionTool, ChatCompletionToolType,
-        CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+        ChatCompletionRequestUserMessage, ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequestArgs,
     },
     Client,
 };
@@ -627,9 +626,4 @@ impl AnthropicProvider {
             }),
         ]
     }
-}
-
-pub enum Provider {
-    OpenAI,
-    Anthropic,
 }

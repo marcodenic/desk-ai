@@ -6,7 +6,7 @@ use chrono::Utc;
 use regex::Regex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::oneshot;
 use uuid::Uuid;
@@ -41,7 +41,6 @@ impl ToolExecutor {
 
         // Check if approval is required
         let approval_required = self.requires_approval(name);
-        let approval_reason = self.get_approval_reason(name, args);
 
         if approval_required {
             let approved = self.request_approval(name, args).await?;
@@ -140,17 +139,6 @@ impl ToolExecutor {
         }
     }
 
-    fn get_approval_reason(&self, name: &str, args: &ToolCallArgs) -> String {
-        match name {
-            "run_shell" => args.command.clone().unwrap_or_default(),
-            "write_file" | "delete_path" | "read_file" | "list_directory" => {
-                args.path.clone().unwrap_or_default()
-            }
-            "search_files" => args.query.clone().unwrap_or_default(),
-            _ => String::new(),
-        }
-    }
-
     async fn request_approval(
         &self,
         action: &str,
@@ -246,7 +234,7 @@ impl ToolExecutor {
         Ok(response)
     }
 
-    async fn run_shell(&self, args: &ToolCallArgs, prompt_id: &str) -> Result<String> {
+    async fn run_shell(&self, args: &ToolCallArgs, _prompt_id: &str) -> Result<String> {
         let command = args
             .command
             .as_ref()
@@ -295,9 +283,6 @@ impl ToolExecutor {
 
         let mut stdout_reader = BufReader::new(stdout).lines();
         let mut stderr_reader = BufReader::new(stderr).lines();
-
-        let mut stdout_buffer = Vec::new();
-        let mut stderr_buffer = Vec::new();
 
         let bridge_clone = self.bridge.clone();
         let session_id_clone = session_id.clone();
@@ -361,8 +346,8 @@ impl ToolExecutor {
             };
 
         // Wait for stream tasks to complete
-        stdout_buffer = stdout_task.await.unwrap_or_default();
-        stderr_buffer = stderr_task.await.unwrap_or_default();
+        let stdout_buffer = stdout_task.await.unwrap_or_default();
+        let stderr_buffer = stderr_task.await.unwrap_or_default();
 
         // Emit shell end
         self.bridge

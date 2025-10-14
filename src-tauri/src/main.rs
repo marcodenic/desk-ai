@@ -168,7 +168,6 @@ fn main() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_http::init())
-    .plugin(tauri_plugin_shell::init())
     .manage(BackendState::new())
     .invoke_handler(tauri::generate_handler![
       start_backend,
