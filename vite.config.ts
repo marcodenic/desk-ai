@@ -13,6 +13,16 @@ export default defineConfig(() => ({
   build: {
     target: process.env.TAURI_PLATFORM === "windows" ? "chrome105" : "safari13",
     minify: !process.env.TAURI_DEBUG ? ("esbuild" as const) : false,
-    sourcemap: !!process.env.TAURI_DEBUG
+    sourcemap: !!process.env.TAURI_DEBUG,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'tauri-vendor': ['@tauri-apps/api', '@tauri-apps/plugin-http'],
+          'ui-vendor': ['lucide-react', '@radix-ui/react-scroll-area', '@radix-ui/react-select']
+        }
+      }
+    }
   }
 }));
