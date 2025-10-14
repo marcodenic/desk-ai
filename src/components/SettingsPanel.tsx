@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-shell";
 import { Loader2, FolderOpen, RefreshCcw, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, FileText } from "lucide-react";
 
 import type { BackendStatus, Provider, Settings } from "../types";
@@ -100,10 +99,11 @@ function SettingsPanel({
         if (!mounted) return;
         setModels(fetched);
         setLoadingModels(false);
+        setFetchError(null); // Clear any errors on success
       })
       .catch((error) => {
-        console.error("Failed to fetch models", error);
         if (!mounted) return;
+        // Don't show error in console since it might be spurious
         setFetchError(error instanceof Error ? error.message : "Unknown error");
         setLoadingModels(false);
       });
@@ -323,10 +323,10 @@ function SettingsPanel({
                     variant="outline"
                     onClick={async () => {
                       try {
-                        const logPath = await invoke<string>("get_log_path");
-                        await open(logPath);
+                        await invoke("open_log_file");
                       } catch (error) {
                         console.error("Failed to open log file:", error);
+                        alert(`Failed to open log file: ${error instanceof Error ? error.message : String(error)}`);
                       }
                     }}
                     className="w-full h-8 gap-1.5 text-xs border-border bg-transparent hover:bg-border/20"

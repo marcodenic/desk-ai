@@ -115,6 +115,55 @@ async fn get_log_path() -> Result<String, String> {
   Ok(log_dir.join("desk-ai.log").to_string_lossy().to_string())
 }
 
+#[tauri::command]
+async fn open_log_file() -> Result<(), String> {
+  let log_dir = if cfg!(target_os = "windows") {
+    dirs::data_local_dir()
+      .ok_or_else(|| "Could not find local data directory".to_string())?
+      .join("DeskAI")
+      .join("logs")
+  } else if cfg!(target_os = "macos") {
+    dirs::data_dir()
+      .ok_or_else(|| "Could not find data directory".to_string())?
+      .join("DeskAI")
+      .join("logs")
+  } else {
+    dirs::data_local_dir()
+      .ok_or_else(|| "Could not find local data directory".to_string())?
+      .join("desk-ai")
+      .join("logs")
+  };
+
+  let log_path = log_dir.join("desk-ai.log");
+  
+  // Use the opener crate or std::process::Command to open the file
+  #[cfg(target_os = "linux")]
+  {
+    std::process::Command::new("xdg-open")
+      .arg(&log_path)
+      .spawn()
+      .map_err(|e| format!("Failed to open log file: {}", e))?;
+  }
+  
+  #[cfg(target_os = "macos")]
+  {
+    std::process::Command::new("open")
+      .arg(&log_path)
+      .spawn()
+      .map_err(|e| format!("Failed to open log file: {}", e))?;
+  }
+  
+  #[cfg(target_os = "windows")]
+  {
+    std::process::Command::new("cmd")
+      .args(&["/C", "start", "", &log_path.to_string_lossy()])
+      .spawn()
+      .map_err(|e| format!("Failed to open log file: {}", e))?;
+  }
+  
+  Ok(())
+}
+
 fn main() {
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
@@ -129,7 +178,8 @@ fn main() {
       approve_tool,
       kill_command,
       select_working_directory,
-      get_log_path
+      get_log_path,
+      open_log_file
     ])
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::CloseRequested { .. } = event {
