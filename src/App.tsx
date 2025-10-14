@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import SettingsPanel from "./components/SettingsPanel";
 import Chat from "./components/Chat";
@@ -17,9 +17,11 @@ import type {
   ToolRequestPayload,
   ToolCallStartEvent,
   ToolCallEndEvent,
+  ToolCallArguments,
 } from "./types";
 import { Button } from "./components/ui/button";
 import { cn } from "./lib/utils";
+import type { StatusType } from "./components/StatusIndicator";
 
 const DEFAULT_SETTINGS: Settings = {
   provider: "openai",
@@ -32,11 +34,19 @@ const DEFAULT_SETTINGS: Settings = {
   showTerminalOnCommand: true,
   autoApproveAll: false,
   allowSystemWide: false,
+  showCommandOutput: true,
+  allowElevatedCommands: false,
 };
 
 const SETTINGS_STORAGE_KEY = "desk-ai::settings";
 
-function formatToolCall(name: string, args: Record<string, any>): string {
+/// Timeout for settings save operation in milliseconds
+const SETTINGS_SAVE_TIMEOUT_MS = 5000;
+
+/// Delay before processing config changes in milliseconds
+const CONFIG_PROCESSING_DELAY_MS = 100;
+
+function formatToolCall(name: string, args: ToolCallArguments): string {
   const argParts: string[] = [];
   
   if (name === "run_shell" && args.command) {
@@ -45,7 +55,7 @@ function formatToolCall(name: string, args: Record<string, any>): string {
     return `Reading file: ${args.path}`;
   } else if (name === "write_file" && args.path) {
     return `Writing file: ${args.path}`;
-  } else if (name === "list_directory" && args.path) {
+  } else if (name === "list_directory") {
     return `Listing directory: ${args.path || "."}`;
   } else if (name === "delete_path" && args.path) {
     return `Deleting: ${args.path}`;
@@ -93,6 +103,8 @@ function saveSettings(settings: Settings): void {
     showTerminalOnCommand: settings.showTerminalOnCommand,
     autoApproveAll: settings.autoApproveAll,
     allowSystemWide: settings.allowSystemWide,
+    showCommandOutput: settings.showCommandOutput,
+    allowElevatedCommands: settings.allowElevatedCommands,
   };
 
   window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
@@ -109,6 +121,8 @@ function App() {
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [popupMode, setPopupMode] = useState(false);
+  const [aiStatus, setAiStatus] = useState<StatusType>("offline");
   // Only open settings panel if no settings exist yet
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(() => {
     const hasValidSettings = settings.apiKey && settings.workdir;
@@ -134,15 +148,7 @@ function App() {
     settings.allowSystemWide,
   ]);
 
-  // Auto-start backend if settings are already configured
-  useEffect(() => {
-    const hasValidSettings = settings.apiKey && settings.workdir;
-    if (hasValidSettings && backendStatus === "idle") {
-      console.log("[App] Auto-starting backend with saved settings");
-      handleSaveSettings();
-    }
-  }, []); // Run once on mount
-
+  // Register event listeners on mount (once)
   useEffect(() => {
     const unlistenFns: UnlistenFn[] = [];
 
@@ -165,6 +171,16 @@ function App() {
       await register<ToolCallEndEvent>("backend://tool_call_end", handleToolCallEnd);
       await register<BackendEvent>("backend://stderr", handleBackendStderr);
       await register<BackendEvent>("backend://exit", handleBackendExit);
+      
+      // Listen for window mode changes
+      const unlistenWindowMode = await listen<boolean>("window-mode-changed", (event) => {
+        setPopupMode(event.payload);
+        // Auto-close settings in popup mode
+        if (event.payload) {
+          setSettingsPanelOpen(false);
+        }
+      });
+      unlistenFns.push(unlistenWindowMode);
     }
 
     setupListeners().catch((error) => {
@@ -174,9 +190,30 @@ function App() {
     return () => {
       unlistenFns.forEach((unlisten) => unlisten());
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Handlers are stable via useCallback, only register once
+
+  // Auto-start backend after a small delay to ensure listeners are ready
+  useEffect(() => {
+    const hasValidSettings = settings.apiKey && settings.workdir;
+    if (hasValidSettings && backendStatus === "idle") {
+      // Small delay to ensure event listeners are registered first
+      const timer = setTimeout(() => {
+        handleSaveSettings();
+      }, CONFIG_PROCESSING_DELAY_MS);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount with initial values
 
   const handleStatusEvent = useCallback((payload: StatusEvent) => {
+    // Clear the safety timeout if it exists
+    const timeoutId = (window as any).__savingConfigTimeout;
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      delete (window as any).__savingConfigTimeout;
+    }
+    
     switch (payload.status) {
       case "starting":
         setBackendStatus("starting");
@@ -184,10 +221,12 @@ function App() {
       case "ready":
         setBackendStatus("ready");
         setSettingsPanelOpen(false); // Hide settings when backend is ready
+        setSavingConfig(false); // Clear saving state when backend is ready
         break;
       case "error":
       default:
         setBackendStatus("error");
+        setSavingConfig(false); // Clear saving state on error
         break;
     }
     setBackendStatusMessage(payload.message);
@@ -239,6 +278,24 @@ function App() {
         exitCode: null,
       },
     ]);
+
+    // Link the session to the most recent run_shell tool message
+    setMessages((current) => {
+      const reversed = [...current].reverse();
+      const toolMessageIndex = reversed.findIndex(
+        (msg) => msg.role === "tool" && msg.toolName === "run_shell" && !msg.sessionId
+      );
+      
+      if (toolMessageIndex === -1) return current;
+      
+      const actualIndex = current.length - 1 - toolMessageIndex;
+      const updated = [...current];
+      updated[actualIndex] = {
+        ...updated[actualIndex],
+        sessionId: payload.sessionId,
+      };
+      return updated;
+    });
 
     if (settingsRef.current.showTerminalOnCommand) {
       setTerminalOpen(true);
@@ -412,7 +469,6 @@ function App() {
   const handleBackendStderr = useCallback((payload: BackendEvent) => {
     if (payload && typeof payload === "object" && "type" in payload && payload.type === "stderr") {
       setBackendStatusMessage(payload.message);
-      console.warn("[backend stderr]", payload.message);
     }
   }, []);
 
@@ -451,6 +507,11 @@ function App() {
     setBackendStatus("starting");
     setBackendStatusMessage("Configuring backend…");
 
+    // Safety timeout: clear saving state after timeout if no status event received
+    const timeoutId = setTimeout(() => {
+      setSavingConfig(false);
+    }, SETTINGS_SAVE_TIMEOUT_MS);
+
     try {
       // Check if backend is running by checking status
       const isBackendRunning = backendStatus === "ready" || backendStatus === "starting";
@@ -468,6 +529,8 @@ function App() {
             confirmShell: settings.confirmShell,
             showTerminalOnCommand: settings.showTerminalOnCommand,
             allowSystemWide: settings.allowSystemWide,
+            showCommandOutput: settings.showCommandOutput,
+            allowElevatedCommands: settings.allowElevatedCommands,
           },
         });
         setBackendStatusMessage("Configuration updated");
@@ -484,21 +547,23 @@ function App() {
             confirmShell: settings.confirmShell,
             showTerminalOnCommand: settings.showTerminalOnCommand,
             allowSystemWide: settings.allowSystemWide,
+            showCommandOutput: settings.showCommandOutput,
+            allowElevatedCommands: settings.allowElevatedCommands,
           },
         });
         setBackendStatusMessage("Backend started");
       }
       
       // Backend will emit status events - we'll wait for them
-      // Status will update to "ready" via handleStatusEvent listener
-      // If there's an auth error, it will be caught on first actual use
+      // The handleStatusEvent will clear savingConfig and timeoutId
+      // Store timeout ID so it can be cleared by event handler
+      (window as any).__savingConfigTimeout = timeoutId;
     } catch (error) {
       console.error("Failed to configure backend", error);
       setBackendStatus("error");
       setBackendStatusMessage(error instanceof Error ? error.message : "Failed to configure backend");
-      setTestingCredentials(false);
-    } finally {
       setSavingConfig(false);
+      clearTimeout(timeoutId);
     }
   }, [settings, backendStatus]);
 
@@ -570,8 +635,6 @@ function App() {
           allowSystemWide: settings.allowSystemWide,
         },
       });
-      
-      console.log("Assistant stopped and backend restarted");
     } catch (error) {
       console.error("Failed to stop assistant:", error);
       setBackendStatus("error");
@@ -581,7 +644,6 @@ function App() {
 
   const resolveApproval = useCallback(
     async (request: ApprovalRequest, approved: boolean) => {
-      console.log("=== resolveApproval called ===", { request, approved });
       try {
         await invoke("approve_tool", {
           requestId: request.requestId,
@@ -598,7 +660,6 @@ function App() {
   );
 
   const handleApproveFromChat = useCallback(() => {
-    console.log("=== handleApproveFromChat called ===");
     const request = approvals[0];
     if (request) {
       resolveApproval(request, true);
@@ -606,7 +667,6 @@ function App() {
   }, [approvals, resolveApproval]);
 
   const handleRejectFromChat = useCallback(() => {
-    console.log("=== handleRejectFromChat called ===");
     const request = approvals[0];
     if (request) {
       resolveApproval(request, false);
@@ -631,9 +691,28 @@ function App() {
     [messages]
   );
 
+  // Compute AI status based on various states
+  useEffect(() => {
+    if (backendStatus === "error") {
+      setAiStatus("error");
+    } else if (backendStatus === "starting" || backendStatus === "idle") {
+      setAiStatus("offline");
+    } else if (approvals.length > 0) {
+      setAiStatus("waiting");
+    } else if (assistantStreaming) {
+      setAiStatus("streaming");
+    } else if (thinking) {
+      setAiStatus("thinking");
+    } else if (messages.some(m => m.role === "tool" && m.toolStatus === "executing")) {
+      setAiStatus("executing");
+    } else if (backendStatus === "ready") {
+      setAiStatus("idle");
+    }
+  }, [backendStatus, approvals.length, assistantStreaming, thinking, messages]);
+
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background lg:flex-row">
-      {settingsPanelOpen && (
+      {settingsPanelOpen && !popupMode && (
         <div className="w-full border-b border-border/40 lg:w-72 lg:border-b-0 lg:border-r">
           <SettingsPanel
             settings={settings}
@@ -651,6 +730,7 @@ function App() {
           messages={messages}
           thinking={thinking}
           backendStatus={backendStatus}
+          aiStatus={aiStatus}
           disabled={chatDisabled || assistantStreaming}
           onSend={handleSendMessage}
           onStop={handleStopAssistant}
@@ -668,6 +748,9 @@ function App() {
           onToggleSystemWide={() =>
             setSettings((prev) => ({ ...prev, allowSystemWide: !prev.allowSystemWide }))
           }
+          terminalSessions={terminalSessions}
+          showCommandOutput={settings.showCommandOutput}
+          popupMode={popupMode}
         />
       </div>
     </div>

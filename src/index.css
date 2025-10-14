@@ -96,4 +96,72 @@
   button[data-state]:disabled {
     background-color: #9ca3af !important;
   }
+
+  /* Status indicator animations */
+  @keyframes pulse-slow {
+    0%, 100% {
+      opacity: 1;
+    }
+    
+    
+    
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  @keyframes breathing {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(0.95);
+    }
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-breathing {
+    animation: breathing 1.5s ease-in-out infinite;
+  }
+
+  /* Elevated command warning */
+  .elevated-warning {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.875rem;
+    margin-bottom: 1rem;
+    background-color: hsl(var(--destructive) / 0.15);
+    border: 1px solid hsl(var(--destructive) / 0.4);
+    border-radius: var(--radius);
+  }
+
+  .elevated-warning-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .elevated-warning-content {
+    flex: 1;
+  }
+
+  .elevated-warning-content strong {
+    display: block;
+    color: hsl(var(--destructive-foreground));
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+  }
+
+  .elevated-warning-content p {
+    color: hsl(var(--foreground) / 0.8);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    margin: 0;
+  }
 }

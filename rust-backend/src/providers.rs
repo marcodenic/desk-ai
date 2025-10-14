@@ -7,13 +7,15 @@ use async_openai::{
     config::OpenAIConfig,
     types::{
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage,
-        ChatCompletionRequestUserMessage, ChatCompletionTool, ChatCompletionToolType,
-        CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+        ChatCompletionRequestUserMessage, ChatCompletionTool, ChatCompletionToolType, CreateChatCompletionRequestArgs,
     },
     Client,
 };
 use futures::StreamExt;
 use serde_json::json;
+
+/// Maximum number of conversation history messages to include in API requests
+const MAX_HISTORY_MESSAGES: usize = 20;
 
 pub struct OpenAIProvider {
     api_key: String,
@@ -44,7 +46,7 @@ impl OpenAIProvider {
         let mut messages = vec![ChatCompletionRequestMessage::System(
             ChatCompletionRequestSystemMessage {
                 content: async_openai::types::ChatCompletionRequestSystemMessageContent::Text(
-                    get_system_prompt(),
+                    get_system_prompt(config),
                 ),
                 name: None,
             },
@@ -55,9 +57,8 @@ impl OpenAIProvider {
         let history_len = history.len();
 
         // Keep last N messages to avoid context length issues (e.g., last 20 messages = 10 exchanges)
-        let max_history_messages = 20;
-        let start_idx = if history_len > max_history_messages + 1 {
-            history_len - max_history_messages - 1 // -1 to exclude current user message
+        let start_idx = if history_len > MAX_HISTORY_MESSAGES + 1 {
+            history_len - MAX_HISTORY_MESSAGES - 1 // -1 to exclude current user message
         } else {
             0
         };
@@ -384,9 +385,8 @@ impl AnthropicProvider {
         let history_len = history.len();
 
         // Keep last N messages to avoid context length issues
-        let max_history_messages = 20;
-        let start_idx = if history_len > max_history_messages + 1 {
-            history_len - max_history_messages - 1
+        let start_idx = if history_len > MAX_HISTORY_MESSAGES + 1 {
+            history_len - MAX_HISTORY_MESSAGES - 1
         } else {
             0
         };
@@ -414,7 +414,7 @@ impl AnthropicProvider {
             let request_body = json!({
                 "model": self.model,
                 "max_tokens": 8192,
-                "system": get_system_prompt(),
+                "system": get_system_prompt(config),
                 "messages": messages,
                 "tools": tools,
                 "stream": true
@@ -627,9 +627,4 @@ impl AnthropicProvider {
             }),
         ]
     }
-}
-
-pub enum Provider {
-    OpenAI,
-    Anthropic,
 }

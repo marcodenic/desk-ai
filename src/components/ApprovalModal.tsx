@@ -14,12 +14,10 @@ function ApprovalModal({ request, busy, onApprove, onReject }: ApprovalModalProp
   }
 
   const handleApprove = () => {
-    console.log("Approve clicked", request);
     onApprove(request);
   };
 
   const handleReject = () => {
-    console.log("Reject clicked", request);
     onReject(request);
   };
 
@@ -58,6 +56,19 @@ function ApprovalModal({ request, busy, onApprove, onReject }: ApprovalModalProp
         </header>
 
         <div className="modal-body">
+          {request.elevated && (
+            <div className="elevated-warning">
+              <div className="elevated-warning-icon">⚠️</div>
+              <div className="elevated-warning-content">
+                <strong>Elevated Privileges Required</strong>
+                <p>
+                  This command requires administrator/root privileges. You may be prompted for
+                  your password or authorization by your operating system.
+                </p>
+              </div>
+            </div>
+          )}
+
           <dl>
             <div>
               <dt>Action</dt>

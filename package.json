@@ -9,7 +9,10 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -21,7 +24,10 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tailwindcss/typography": "^0.5.19",
-    "@tauri-apps/api": "^1.6.0",
+    "@tauri-apps/api": "~2.8",
+    "@tauri-apps/plugin-dialog": "~2.2",
+    "@tauri-apps/plugin-http": "~2.4",
+    "@tauri-apps/plugin-shell": "~2.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "highlight.js": "^11.11.1",
@@ -35,17 +41,22 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.14",
-    "@tauri-apps/cli": "^1.5.9",
+    "@tauri-apps/cli": "^2.8.4",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/jest-dom": "^6.6.4",
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.2",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/ui": "^2.1.8",
     "autoprefixer": "^10.4.21",
+    "jsdom": "^25.0.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.14",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.5.4",
-    "vite": "^5.3.4"
+    "vite": "^5.3.4",
+    "vitest": "^2.1.8"
   },
   "engines": {
     "node": ">=18"

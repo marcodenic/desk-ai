@@ -2,7 +2,7 @@
 
 Your personal AI-powered desktop assistant that can read files, execute commands, and help you get things done—all while keeping you in complete control.
 
-![Desk AI Screenshot](screenshot.png)
+![Desk AI Screenshot](assets/screenshot.png)
 
 ## 🎯 What is Desk AI?
 
@@ -23,6 +23,10 @@ Think of it as having an intelligent assistant that understands your system and 
 - **✅ Stay in Control** – Review and approve file changes and commands before they execute
 - **💬 Real-Time Chat** – See AI responses stream in with live tool execution feedback
 - **🌍 System-Wide Mode** – Toggle between restricted workspace or full system access
+- **🎯 Mini Mode** – Compact 400px popup view for quick interactions
+- **⚡ Status Indicator** – Real-time visual feedback showing AI activity state
+- **⌨️ Global Shortcut** – Press `Ctrl+Shift+Space` anywhere to toggle the window
+- **🔔 System Tray** – Quick access menu with Show/Hide, Mini Mode toggle, and Quit
 - **🛠️ Powerful Tools**:
   - Execute terminal commands with streaming output
   - Read, write, and search files
@@ -94,6 +98,22 @@ You'll need an API key from one of these providers:
 7. **Click "Save & Test"** to verify your credentials
 
 ### 4. Start Using It!
+
+**Global Shortcut**
+- Press `Ctrl+Shift+Space` (Windows/Linux) or `Cmd+Shift+Space` (macOS) to toggle the window anywhere
+
+**System Tray**
+- Look for the green bolt icon in your system tray
+- Click to access menu: Show/Hide, Mini Mode, Quit
+- Mini Mode gives you a compact 400px popup for quick tasks
+
+**Status Indicator**
+- Watch the status indicator (top-right) for real-time AI activity:
+  - 🔴 Offline - Not connected
+  - 🟢 Idle - Ready for your input
+  - 🔵 Thinking - Processing your request
+  - ⚡ Executing - Running tools/commands
+  - 📡 Streaming - Receiving AI response
 
 Try asking:
 

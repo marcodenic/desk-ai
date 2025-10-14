@@ -1,10 +1,12 @@
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown, Square } from "lucide-react";
+import { Bolt, ShieldAlert, ShieldCheck, Globe2, Settings2, Trash2, Loader2, Terminal, ArrowDown, Square, Maximize2, Minimize2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 
-import type { ApprovalRequest, BackendStatus, ChatMessage } from "../types";
+import type { ApprovalRequest, BackendStatus, ChatMessage, TerminalSession } from "../types";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Badge, type BadgeProps } from "./ui/badge";
@@ -13,11 +15,13 @@ import { Textarea } from "./ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { Switch } from "./ui/switch";
 import { cn } from "../lib/utils";
+import { StatusIndicator, type StatusType } from "./StatusIndicator";
 
 interface ChatProps {
   messages: ChatMessage[];
   thinking: boolean;
   backendStatus: BackendStatus;
+  aiStatus: StatusType;
   disabled: boolean;
   onSend: (text: string) => Promise<void>;
   onStop: () => void;
@@ -31,12 +35,16 @@ interface ChatProps {
   onToggleAutoApprove: () => void;
   allowSystemWide: boolean;
   onToggleSystemWide: () => void;
+  terminalSessions: TerminalSession[];
+  showCommandOutput: boolean;
+  popupMode?: boolean;
 }
 
 function Chat({
   messages,
   thinking,
   backendStatus,
+  aiStatus,
   disabled,
   onSend,
   onStop,
@@ -50,6 +58,9 @@ function Chat({
   onToggleAutoApprove,
   allowSystemWide,
   onToggleSystemWide,
+  terminalSessions,
+  showCommandOutput,
+  popupMode = false,
 }: ChatProps) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -74,33 +85,50 @@ function Chat({
     textarea.style.height = Math.min(textarea.scrollHeight, maxHeight) + 'px';
   }, [draft]);
 
+  // Listen for focus-input event from global shortcut
+  useEffect(() => {
+    const unlisten = listen('focus-input', () => {
+      textareaRef.current?.focus();
+    });
+
+    return () => {
+      unlisten.then(fn => fn());
+    };
+  }, []);
+
   // Auto-scroll to bottom when messages change, but only if autoScroll is enabled
   useEffect(() => {
-    if (!autoScroll) return;
+    if (!autoScroll) return; // Respect user's scroll position
     const viewport = viewportRef.current;
     if (!viewport) {
-      console.log("No viewport ref found");
       return;
     }
-    console.log("Auto-scrolling to bottom");
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
   }, [messages, thinking, approvalRequest, autoScroll]);
+
+  // Force scroll to bottom when entering popup mode (one-time)
+  useEffect(() => {
+    if (popupMode) {
+      const viewport = viewportRef.current;
+      if (viewport) {
+        // Use setTimeout to ensure DOM has updated
+        setTimeout(() => {
+          viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+        }, 100);
+      }
+    }
+  }, [popupMode]);
 
   // Check scroll position to show/hide scroll button and update autoScroll
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) {
-      console.log("No viewport for scroll listener");
       return;
     }
-
-    console.log("Setting up scroll listener on viewport", viewport);
 
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = viewport;
       const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-      
-      console.log("Scroll detected:", { scrollTop, scrollHeight, clientHeight, isAtBottom });
       
       setShowScrollButton(!isAtBottom);
       setAutoScroll(isAtBottom);
@@ -151,31 +179,6 @@ function Chat({
     }
   }, [draft, canSend, onSend]);
 
-  const statusBadge = (() => {
-    switch (backendStatus) {
-      case "ready":
-        return (
-          <Badge variant="success" className="gap-1">
-            <Bolt className="h-4 w-4" /> Online
-          </Badge>
-        );
-      case "starting":
-        return (
-          <Badge variant="warning" className="gap-1">
-            <Loader2 className="h-4 w-4 animate-spin" /> Connecting
-          </Badge>
-        );
-      case "error":
-        return (
-          <Badge variant="destructive" className="gap-1">
-            <ShieldAlert className="h-4 w-4" /> Error
-          </Badge>
-        );
-      default:
-        return <Badge variant="outline">Idle</Badge>;
-    }
-  })();
-
   const placeholder = backendStatus === "ready"
     ? "Ask the assistant for help… (⌘⏎ / Ctrl⏎ to send)"
     : backendStatus === "starting"
@@ -185,64 +188,111 @@ function Chat({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex h-full flex-col bg-background">
-        <header className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border px-4 py-3 min-h-[53px]">
-          <div className="flex items-center gap-3">
-            <h1 className="text-sm font-semibold">DESK AI</h1>
-            <span className="text-xs text-muted-foreground">
-              super power your desktop
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs">
-            <div className="h-2 w-2 rounded-full bg-green-500" />
-            <span className="text-gray-400">Online</span>
-          </div>
-          <div className="flex items-center gap-2 ml-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onToggleSettings}
-              className="h-7 w-7 p-0"
-            >
-              <Settings2 className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="flex items-center gap-4">
+        {popupMode ? (
+          <header className="flex items-center justify-between border-b border-border px-3 py-2 bg-card/50">
             <div className="flex items-center gap-2">
-              <Switch
-                checked={autoApproveAll}
-                onCheckedChange={onToggleAutoApprove}
-              />
-              <label className="text-xs cursor-pointer" onClick={onToggleAutoApprove}>
-                {autoApproveAll ? "Auto Allow" : "Manual Approve"}
-              </label>
+              <h1 className="text-xs font-semibold">DESK AI</h1>
+              <StatusIndicator status={aiStatus} compact />
             </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={allowSystemWide}
-                onCheckedChange={() => onToggleSystemWide()}
-                disabled={backendStatus !== "ready"}
-              />
-              <label className="text-xs cursor-pointer" onClick={onToggleSystemWide}>
-                {allowSystemWide ? "System Wide" : "Workdir Only"}
-              </label>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await invoke("toggle_window_mode", { popupMode: false });
+                  } catch (error) {
+                    console.error("Failed to toggle window mode:", error);
+                  }
+                }}
+                className="h-6 w-6 p-0"
+                title="Expand to full mode"
+              >
+                <Maximize2 className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClear}
+                disabled={messages.length === 0}
+                className="h-6 w-6 p-0"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClear}
-              disabled={messages.length === 0}
-              className="h-7 gap-1.5 px-2.5 text-xs"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Clear Chat
-            </Button>
-          </div>
-        </header>
+          </header>
+        ) : (
+          <header className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border px-4 py-3 min-h-[53px]">
+            <div className="flex items-center gap-3">
+              <h1 className="text-sm font-semibold">DESK AI</h1>
+              <span className="text-xs text-muted-foreground">
+                super power your desktop
+              </span>
+            </div>
+            <StatusIndicator status={aiStatus} compact />
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await invoke("toggle_window_mode", { popupMode: true });
+                  } catch (error) {
+                    console.error("Failed to toggle window mode:", error);
+                  }
+                }}
+                className="h-7 w-7 p-0"
+                title="Switch to mini mode"
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggleSettings}
+                className="h-7 w-7 p-0"
+              >
+                <Settings2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={autoApproveAll}
+                  onCheckedChange={onToggleAutoApprove}
+                />
+                <label className="text-xs cursor-pointer" onClick={onToggleAutoApprove}>
+                  {autoApproveAll ? "Auto Allow" : "Manual Approve"}
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={allowSystemWide}
+                  onCheckedChange={() => onToggleSystemWide()}
+                  disabled={backendStatus !== "ready"}
+                />
+                <label className="text-xs cursor-pointer" onClick={onToggleSystemWide}>
+                  {allowSystemWide ? "System Wide" : "Workdir Only"}
+                </label>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClear}
+                disabled={messages.length === 0}
+                className="h-7 gap-1.5 px-2.5 text-xs"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear Chat
+              </Button>
+            </div>
+          </header>
+        )}
 
         <div className="relative flex-1 overflow-hidden">
           <ScrollArea 
             viewportRef={viewportRef}
-            className="subtle-scrollbar h-full px-6 py-4"
+            className={cn("subtle-scrollbar h-full", popupMode ? "px-3 py-2" : "px-6 py-4")}
           >
             <div 
               ref={listRef}
@@ -250,7 +300,13 @@ function Chat({
             >
               {messages.length === 0 && !approvalRequest && !thinking && <EmptyState />}
               {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
+                <MessageBubble 
+                  key={message.id} 
+                  message={message} 
+                  terminalSessions={terminalSessions}
+                  showCommandOutput={showCommandOutput}
+                  popupMode={popupMode}
+                />
               ))}
               {thinking && <ThinkingBubble />}
               {approvalRequest && (
@@ -270,7 +326,7 @@ function Chat({
           )}
         </div>
 
-        <div className="border-t border-border/40 bg-card/20 px-4 py-3">
+        <div className={cn("border-t border-border/40 bg-card/20", popupMode ? "px-3 py-2" : "px-4 py-3")}>
           <form onSubmit={handleSubmit} className="relative">
             <Textarea
               ref={textareaRef}
@@ -279,8 +335,11 @@ function Chat({
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={handleKeyDown}
               disabled={backendStatus !== "ready" || disabled || sending}
-              className="min-h-[88px] max-h-[30vh] resize-none border-border/50 bg-card/50 text-sm shadow-sm py-2.5 pr-12 overflow-y-auto"
-              rows={2}
+              className={cn(
+                "resize-none border-border/50 bg-card/50 text-sm shadow-sm pr-12 overflow-y-auto",
+                popupMode ? "min-h-[60px] max-h-[25vh] py-2" : "min-h-[88px] max-h-[30vh] py-2.5"
+              )}
+              rows={popupMode ? 2 : 2}
             />
             {isStreaming || sending || thinking ? (
               <Button 
@@ -288,19 +347,19 @@ function Chat({
                 onClick={onStop} 
                 size="sm" 
                 variant="destructive"
-                className="absolute right-2 bottom-2 h-10 w-10 p-0 shrink-0"
+                className={cn("absolute right-2 p-0 shrink-0", popupMode ? "bottom-2 h-8 w-8" : "bottom-2 h-10 w-10")}
               >
-                <Square className="h-5 w-5" />
+                <Square className={popupMode ? "h-4 w-4" : "h-5 w-5"} />
               </Button>
             ) : (
               <Button 
                 type="submit" 
                 disabled={!canSend} 
                 size="sm" 
-                className="absolute right-2 bottom-2 h-10 w-10 p-0 shrink-0"
+                className={cn("absolute right-2 p-0 shrink-0", popupMode ? "bottom-2 h-8 w-8" : "bottom-2 h-10 w-10")}
                 style={{ backgroundColor: 'white', color: 'black' }}
               >
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg className={popupMode ? "h-4 w-4" : "h-5 w-5"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>
@@ -342,9 +401,12 @@ function ControlButton({ active, onClick, icon: Icon, tooltip, label }: ControlB
 
 interface MessageProps {
   message: ChatMessage;
+  terminalSessions: TerminalSession[];
+  showCommandOutput: boolean;
+  popupMode?: boolean;
 }
 
-function MessageBubble({ message }: MessageProps) {
+function MessageBubble({ message, terminalSessions, showCommandOutput, popupMode = false }: MessageProps) {
   const isUser = message.role === "user";
   const isTool = message.role === "tool";
   const timestamp = new Date(message.createdAt).toLocaleTimeString();
@@ -368,26 +430,63 @@ function MessageBubble({ message }: MessageProps) {
       const isCompleted = message.toolStatus === "completed";
       const isFailed = message.toolStatus === "failed";
       
+      // Find the corresponding terminal session
+      const session = message.sessionId 
+        ? terminalSessions.find(s => s.sessionId === message.sessionId)
+        : null;
+      
       return (
-        <div className="flex items-start gap-2.5 py-1.5">
+        <div className="flex flex-col gap-2 py-1.5">
           <div className={cn(
-            "flex items-center gap-2 py-1.5 px-3 rounded-full border shrink-0",
-            isCompleted && "bg-green-500/10 border-green-500/30",
-            isFailed && "bg-red-500/10 border-red-500/30",
-            !isCompleted && !isFailed && "bg-yellow-500/10 border-yellow-500/30"
+            "flex gap-2.5",
+            popupMode ? "flex-col items-start" : "items-start"
           )}>
-            <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-xs text-muted-foreground">run_shell</span>
-            <span className={cn(
-              "text-xs shrink-0",
-              isCompleted && "text-green-500",
-              isFailed && "text-red-500",
-              !isCompleted && !isFailed && "text-yellow-500"
+            <div className={cn(
+              "flex items-center gap-2 py-1.5 px-3 rounded-full border shrink-0",
+              isCompleted && "bg-green-500/10 border-green-500/30",
+              isFailed && "bg-red-500/10 border-red-500/30",
+              !isCompleted && !isFailed && "bg-yellow-500/10 border-yellow-500/30"
             )}>
-              {statusIcon}
-            </span>
+              <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground">run_shell</span>
+              <span className={cn(
+                "text-xs shrink-0",
+                isCompleted && "text-green-500",
+                isFailed && "text-red-500",
+                !isCompleted && !isFailed && "text-yellow-500"
+              )}>
+                {statusIcon}
+              </span>
+            </div>
+            <code className={cn(
+              "font-mono text-xs text-muted-foreground break-all",
+              popupMode ? "pt-0" : "pt-2"
+            )}>$ {command}</code>
           </div>
-          <code className="font-mono text-xs text-muted-foreground pt-2">$ {command}</code>
+          
+          {/* Display terminal output if available and enabled */}
+          {showCommandOutput && session && session.output.length > 0 && (
+            <div className="ml-0 mt-1 rounded-md bg-muted/30 border border-muted-foreground/20 p-3 font-mono text-xs overflow-x-auto">
+              {session.output.map((chunk, idx) => (
+                <span
+                  key={idx}
+                  className={cn(
+                    chunk.stream === "stderr" && "text-red-400"
+                  )}
+                >
+                  {chunk.text}
+                </span>
+              ))}
+              {session.exitCode !== null && (
+                <div className={cn(
+                  "mt-2 pt-2 border-t border-muted-foreground/20 text-xs",
+                  session.exitCode === 0 ? "text-green-500" : "text-red-500"
+                )}>
+                  Exit code: {session.exitCode}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       );
     }

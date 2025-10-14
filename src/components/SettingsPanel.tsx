@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetch as tauriFetch } from "@tauri-apps/api/http";
-import { Loader2, FolderOpen, RefreshCcw, AlertCircle, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { invoke } from "@tauri-apps/api/core";
+import { Loader2, FolderOpen, RefreshCcw, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, FileText } from "lucide-react";
 
 import type { BackendStatus, Provider, Settings } from "../types";
 import { Button } from "./ui/button";
@@ -10,6 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Switch } from "./ui/switch";
 import { Badge } from "./ui/badge";
 import { ScrollArea } from "./ui/scroll-area";
+
+/// API endpoint for fetching available AI models
+const MODELS_API_URL = "https://models.dev/api.json";
 
 interface SettingsPanelProps {
   settings: Settings;
@@ -42,12 +46,15 @@ interface ProviderData {
 }
 
 async function fetchModels(): Promise<Record<Provider, string[]>> {
-  const response = await tauriFetch<Record<string, ProviderData>>("https://models.dev/api.json", {
+  const response = await tauriFetch(MODELS_API_URL, {
     method: "GET",
-    timeout: 30,
   });
 
-  const data = response.data;
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const data = await response.json() as Record<string, ProviderData>;
   const anthropicModels = data.anthropic?.models
     ? Object.values(data.anthropic.models)
         .filter((model) => model.tool_call)
@@ -87,6 +94,37 @@ function SettingsPanel({
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [connectionExpanded, setConnectionExpanded] = useState(true);
   const [permissionsExpanded, setPermissionsExpanded] = useState(true);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  // Validation function
+  const validateSettings = (settingsToValidate: Settings): Record<string, string> => {
+    const errors: Record<string, string> = {};
+
+    // Validate API key
+    if (!settingsToValidate.apiKey || settingsToValidate.apiKey.trim().length === 0) {
+      errors.apiKey = "API key is required";
+    } else if (settingsToValidate.provider === "openai" && !settingsToValidate.apiKey.startsWith("sk-")) {
+      errors.apiKey = "OpenAI API keys should start with 'sk-'";
+    }
+
+    // Validate working directory
+    if (!settingsToValidate.workdir || settingsToValidate.workdir.trim().length === 0) {
+      errors.workdir = "Working directory is required";
+    }
+
+    // Validate model selection
+    if (!settingsToValidate.model || settingsToValidate.model.trim().length === 0) {
+      errors.model = "Model selection is required";
+    }
+
+    return errors;
+  };
+
+  // Validate on settings change
+  useEffect(() => {
+    const errors = validateSettings(settings);
+    setValidationErrors(errors);
+  }, [settings]);
 
   useEffect(() => {
     let mounted = true;
@@ -98,10 +136,11 @@ function SettingsPanel({
         if (!mounted) return;
         setModels(fetched);
         setLoadingModels(false);
+        setFetchError(null); // Clear any errors on success
       })
       .catch((error) => {
-        console.error("Failed to fetch models", error);
         if (!mounted) return;
+        // Don't show error in console since it might be spurious
         setFetchError(error instanceof Error ? error.message : "Unknown error");
         setLoadingModels(false);
       });
@@ -144,6 +183,9 @@ function SettingsPanel({
   const modelValue = availableModels.includes(settings.model)
     ? settings.model
     : availableModels[0] ?? settings.model;
+
+  const hasValidationErrors = Object.keys(validationErrors).length > 0;
+  const canSave = !saving && !hasValidationErrors;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-black">
@@ -225,7 +267,7 @@ function SettingsPanel({
                 </div>
               ) : (
                 <Select value={modelValue} onValueChange={(value) => onChange({ model: value })}>
-                  <SelectTrigger id="model" className="h-8 text-xs">
+                  <SelectTrigger id="model" className={`h-8 text-xs ${validationErrors.model ? 'border-red-500' : ''}`}>
                     <SelectValue placeholder="Select model" />
                   </SelectTrigger>
                   <SelectContent className="max-h-60">
@@ -236,6 +278,9 @@ function SettingsPanel({
                     ))}
                   </SelectContent>
                 </Select>
+              )}
+              {validationErrors.model && (
+                <p className="text-xs text-red-500">{validationErrors.model}</p>
               )}
             </div>
 
@@ -250,14 +295,17 @@ function SettingsPanel({
                 onChange={(event) => onChange({ apiKey: event.target.value.trim() })}
                 placeholder={settings.provider === "openai" ? "sk-…" : "sk-ant-…"}
                 autoComplete="off"
-                className="h-8 text-xs font-mono"
+                className={`h-8 text-xs font-mono ${validationErrors.apiKey ? 'border-red-500' : ''}`}
               />
+              {validationErrors.apiKey && (
+                <p className="text-xs text-red-500">{validationErrors.apiKey}</p>
+              )}
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Working Directory</Label>
               <div className="flex gap-2 items-center">
-                <div className="flex-1 flex items-center h-8 truncate rounded border border-border bg-secondary px-2 text-xs text-muted-foreground font-mono">
+                <div className={`flex-1 flex items-center h-8 truncate rounded border bg-secondary px-2 text-xs text-muted-foreground font-mono ${validationErrors.workdir ? 'border-red-500' : 'border-border'}`}>
                   {settings.workdir || "No directory"}
                 </div>
                 <Button
@@ -268,6 +316,9 @@ function SettingsPanel({
                   <FolderOpen className="h-3.5 w-3.5" /> Browse
                 </Button>
               </div>
+              {validationErrors.workdir && (
+                <p className="text-xs text-red-500">{validationErrors.workdir}</p>
+              )}
             </div>
               </div>
             )}
@@ -304,6 +355,34 @@ function SettingsPanel({
                   checked={settings.confirmShell}
                   onCheckedChange={(value) => onChange({ confirmShell: value })}
                 />
+                <ToggleRow
+                  label="Show command output in chat"
+                  checked={settings.showCommandOutput}
+                  onCheckedChange={(value) => onChange({ showCommandOutput: value })}
+                />
+                <ToggleRow
+                  label="Allow elevated commands (sudo/admin)"
+                  description="⚠️ Enables commands that require administrator privileges"
+                  checked={settings.allowElevatedCommands}
+                  onCheckedChange={(value) => onChange({ allowElevatedCommands: value })}
+                />
+                
+                <div className="pt-2 border-t border-border">
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await invoke("open_log_file");
+                      } catch (error) {
+                        console.error("Failed to open log file:", error);
+                        alert(`Failed to open log file: ${error instanceof Error ? error.message : String(error)}`);
+                      }
+                    }}
+                    className="w-full h-8 gap-1.5 text-xs border-border bg-transparent hover:bg-border/20"
+                  >
+                    <FileText className="h-3.5 w-3.5" /> Open Log File
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -311,10 +390,20 @@ function SettingsPanel({
       </ScrollArea>
 
       <div className="border-t border-border p-4">
+        {hasValidationErrors && (
+          <div className="mb-3 rounded border border-amber-600 bg-amber-950/50 px-2.5 py-1.5 text-xs text-amber-400">
+            <div className="font-medium mb-1">Please fix the following:</div>
+            <ul className="list-disc list-inside space-y-0.5">
+              {Object.entries(validationErrors).map(([field, error]) => (
+                <li key={field}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <Button 
           onClick={onSave} 
-          disabled={saving}
-          className="w-full h-8 bg-white text-black hover:bg-white/90 font-semibold"
+          disabled={!canSave}
+          className="w-full h-8 bg-white text-black hover:bg-white/90 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? (
             <>

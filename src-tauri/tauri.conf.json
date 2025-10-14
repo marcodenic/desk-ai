@@ -1,34 +1,30 @@
 {
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Desk AI",
+  "version": "0.1.0",
+  "identifier": "com.marcodenic.deskai",
   "build": {
     "beforeDevCommand": "npm run dev -- --open=false",
+    "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build",
-    "devPath": "http://localhost:5173",
-    "distDir": "../dist"
+    "frontendDist": "../dist"
   },
-  "package": {
-    "productName": "Desk AI",
-    "version": "0.1.0"
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "bin/desk-ai-backend"
+    ]
   },
-  "tauri": {
-    "bundle": {
-      "active": true,
-      "identifier": "com.marcodenic.deskai",
-      "targets": "all",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ],
-      "externalBin": [
-        "bin/desk-ai-backend"
-      ]
-    },
-    "security": {
-      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
-    },
+  "app": {
     "windows": [
       {
         "title": "Desk AI",
@@ -38,23 +34,47 @@
         "height": 720
       }
     ],
-    "allowlist": {
-      "all": false,
-      "dialog": {
-        "all": false,
-        "open": true
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
       },
-      "window": {
-        "all": true
-      },
-      "shell": {
-        "all": false
-      },
-      "http": {
-        "all": false,
-        "request": true,
-        "scope": ["https://models.dev/*"]
-      }
+      "capabilities": [{
+        "identifier": "main-capability",
+        "description": "Capability for the main window",
+        "windows": ["main"],
+        "permissions": [
+          "core:default",
+          "core:event:allow-listen",
+          "core:event:allow-emit",
+          "core:event:allow-emit-to",
+          "core:window:allow-show",
+          "core:window:allow-hide",
+          "core:window:allow-set-focus",
+          "core:window:allow-set-size",
+          "core:window:allow-set-position",
+          "core:window:allow-set-resizable",
+          "core:window:allow-set-decorations",
+          "core:window:allow-set-always-on-top",
+          "core:window:allow-center",
+          "core:window:allow-current-monitor",
+          "core:window:allow-outer-size",
+          "core:tray:default",
+          "global-shortcut:default",
+          "global-shortcut:allow-register",
+          "global-shortcut:allow-is-registered",
+          "http:default",
+          {
+            "identifier": "http:allow-fetch",
+            "allow": [
+              { "url": "https://models.dev/api.json" }
+            ]
+          },
+          "dialog:default",
+          "dialog:allow-open"
+        ]
+      }]
     }
   }
 }

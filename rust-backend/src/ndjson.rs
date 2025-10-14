@@ -1,5 +1,5 @@
 use crate::config::validate_config;
-use crate::providers::{AnthropicProvider, OpenAIProvider, Provider};
+use crate::providers::{AnthropicProvider, OpenAIProvider};
 use crate::types::{
     ApprovalResponse, ApprovalSender, BackendConfig, IncomingMessage, OutgoingEvent,
 };
@@ -140,7 +140,6 @@ impl NdjsonBridge {
         drop(config_guard);
 
         let bridge_ref = BridgeRef {
-            config: self.config.clone(),
             pending_approvals: self.pending_approvals.clone(),
             conversation_history: self.conversation_history.clone(),
         };
@@ -242,7 +241,6 @@ impl NdjsonBridge {
 // A clonable reference to bridge internals for use in spawned tasks
 #[derive(Clone)]
 pub struct BridgeRef {
-    pub config: Arc<RwLock<Option<BackendConfig>>>,
     pub pending_approvals: Arc<RwLock<HashMap<String, ApprovalSender>>>,
     pub conversation_history: Arc<RwLock<Vec<ConversationMessage>>>,
 }

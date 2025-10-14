@@ -37,6 +37,8 @@ pub struct BackendConfig {
     pub confirm_shell: bool,
     #[serde(default = "default_false")]
     pub allow_system_wide: bool,
+    #[serde(default = "default_false")]
+    pub allow_elevated_commands: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +80,8 @@ pub enum OutgoingEvent {
         action: String,
         #[serde(flatten)]
         details: HashMap<String, serde_json::Value>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        elevated: Option<bool>,
     },
     ToolCallStart {
         #[serde(rename = "toolCallId")]
@@ -117,13 +121,6 @@ pub enum OutgoingEvent {
         message: String,
         ts: String,
     },
-}
-
-#[derive(Debug, Clone)]
-pub struct ApprovalRequest {
-    pub request_id: String,
-    pub action: String,
-    pub details: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone)]
