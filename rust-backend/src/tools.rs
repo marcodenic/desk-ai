@@ -843,21 +843,43 @@ impl ToolExecutor {
         if self.config.allow_system_wide {
             let candidate = PathBuf::from(relative);
             if candidate.is_absolute() {
-                return Ok(candidate.canonicalize()?);
+                // Try to canonicalize, but if it fails (common on Windows), use the path as-is
+                return Ok(candidate.canonicalize().unwrap_or(candidate));
             }
         }
 
         // Otherwise, resolve relative to workdir
-        let candidate = self.config.workdir.join(relative).canonicalize()?;
+        let candidate = self.config.workdir.join(relative);
+        
+        // Try to canonicalize, but fall back to the constructed path if it fails
+        // This is important on Windows where canonicalize can fail for valid paths
+        let resolved = candidate.canonicalize().unwrap_or_else(|_| {
+            // If canonicalize fails, clean up the path manually
+            let mut components = Vec::new();
+            for component in candidate.components() {
+                match component {
+                    std::path::Component::ParentDir => {
+                        components.pop();
+                    }
+                    std::path::Component::CurDir => {}
+                    _ => components.push(component),
+                }
+            }
+            components.iter().collect()
+        });
 
         // If not in system-wide mode, enforce sandbox
         if !self.config.allow_system_wide {
-            if !candidate.starts_with(&self.config.workdir) {
+            // Canonicalize workdir for comparison
+            let workdir_canonical = self.config.workdir.canonicalize()
+                .unwrap_or_else(|_| self.config.workdir.clone());
+            
+            if !resolved.starts_with(&workdir_canonical) {
                 return Err(anyhow!("Access outside of workspace is denied"));
             }
         }
 
-        Ok(candidate)
+        Ok(resolved)
     }
 }
 
