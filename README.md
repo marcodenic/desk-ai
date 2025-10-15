@@ -2,16 +2,11 @@
 
 Your personal AI-powered desktop assistant that can read files, execute commands, and help you get things done—all while keeping you in complete control.
 
-https://github.com/user-attachments/assets/demo.mp4
-
-<details>
-<summary>📸 View Screenshots</summary>
+![Desk AI Demo](assets/demo.gif)
 
 ![Desk AI Screenshot 1](assets/screenshot-1.png)
 
 ![Desk AI Screenshot 2](assets/screenshot-2.png)
-
-</details>
 
 ## 🎯 What is Desk AI?
 
