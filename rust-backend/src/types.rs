@@ -160,9 +160,9 @@ pub struct ToolCallArgs {
     pub max_results: Option<usize>,
 }
 
-impl ToolCallArgs {
-    pub fn from_value(value: &serde_json::Value) -> Self {
-        serde_json::from_value(value.clone()).unwrap_or_else(|_| ToolCallArgs {
+impl Default for ToolCallArgs {
+    fn default() -> Self {
+        Self {
             path: None,
             command: None,
             timeout: None,
@@ -175,6 +175,12 @@ impl ToolCallArgs {
             regex: None,
             case_sensitive: None,
             max_results: None,
-        })
+        }
+    }
+}
+
+impl ToolCallArgs {
+    pub fn from_value(value: &serde_json::Value) -> Self {
+        serde_json::from_value(value.clone()).unwrap_or_else(|_| ToolCallArgs::default())
     }
 }

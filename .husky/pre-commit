@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🧪 Running pre-commit tests..."
+echo ""
+
+# Run frontend tests
+echo "📦 Running frontend tests..."
+npm test -- --run --reporter=verbose || {
+  echo "❌ Frontend tests failed!"
+  exit 1
+}
+
+echo "✅ Frontend tests passed!"
+echo ""
+
+# Run Rust backend tests
+echo "🦀 Running Rust backend tests..."
+cd rust-backend && cargo test --quiet || {
+  echo "❌ Rust tests failed!"
+  exit 1
+}
+
+echo "✅ Rust tests passed!"
+echo ""
+echo "✨ All tests passed! Proceeding with commit..."

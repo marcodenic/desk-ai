@@ -886,6 +886,34 @@ impl ToolExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use std::collections::HashMap;
+
+    // Create a test BridgeRef that doesn't actually emit to stdout
+    fn create_test_bridge() -> BridgeRef {
+        BridgeRef {
+            pending_approvals: Arc::new(RwLock::new(HashMap::new())),
+            conversation_history: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    fn create_test_executor(workdir: PathBuf, allow_system_wide: bool) -> ToolExecutor {
+        let config = BackendConfig {
+            provider: crate::types::Provider::OpenAI,
+            api_key: "test-key".to_string(),
+            model: "gpt-4".to_string(),
+            workdir,
+            auto_approve_reads: false,
+            confirm_writes: true,
+            confirm_shell: true,
+            allow_system_wide,
+            allow_elevated_commands: false,
+        };
+        let bridge = create_test_bridge();
+        ToolExecutor::new(config, bridge)
+    }
 
     #[test]
     fn test_tool_output_preview_truncation() {
@@ -956,5 +984,389 @@ mod tests {
         cmd_lower.contains("reg delete") ||
         cmd_lower.contains("net user") ||
         cmd_lower.contains("set-executionpolicy")
+    }
+
+    // ===== Path Resolution Tests =====
+
+    #[test]
+    fn test_resolve_path_sandbox_relative() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let executor = create_test_executor(workdir.clone(), false);
+
+        let result = executor.resolve_path("test.txt");
+        assert!(result.is_ok());
+        let resolved = result.unwrap();
+        assert!(resolved.starts_with(&workdir));
+    }
+
+    #[test]
+    fn test_resolve_path_sandbox_blocks_absolute() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let executor = create_test_executor(workdir, false);
+
+        #[cfg(not(target_os = "windows"))]
+        let result = executor.resolve_path("/etc/passwd");
+        
+        #[cfg(target_os = "windows")]
+        let result = executor.resolve_path("C:\\Windows\\System32");
+
+        // Should fail when not in system-wide mode
+        assert!(result.is_err() || !result.unwrap().to_string_lossy().contains("etc"));
+    }
+
+    #[test]
+    fn test_resolve_path_sandbox_blocks_parent_traversal() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let executor = create_test_executor(workdir.clone(), false);
+
+        // Try to escape with ../../../
+        let result = executor.resolve_path("../../../etc/passwd");
+        
+        // Should either fail or stay within workdir
+        if let Ok(resolved) = result {
+            assert!(resolved.starts_with(&workdir));
+        }
+    }
+
+    #[test]
+    fn test_resolve_path_system_wide_allows_absolute() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let executor = create_test_executor(workdir, true);
+
+        #[cfg(not(target_os = "windows"))]
+        let absolute_path = "/tmp";
+        
+        #[cfg(target_os = "windows")]
+        let absolute_path = "C:\\Windows";
+
+        let result = executor.resolve_path(absolute_path);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resolve_path_empty_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let executor = create_test_executor(temp_dir.path().to_path_buf(), false);
+
+        let result = executor.resolve_path("");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("required"));
+    }
+
+    // ===== File Operations Tests =====
+
+    #[tokio::test]
+    async fn test_read_file_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let test_file = workdir.join("test.txt");
+        
+        std::fs::write(&test_file, "Hello, World!").unwrap();
+
+        let executor = create_test_executor(workdir, false);
+        let args = ToolCallArgs {
+            path: Some("test.txt".to_string()),
+            max_bytes: Some(1000),
+            ..Default::default()
+        };
+
+        let result = executor.read_file(&args).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Hello, World!");
+    }
+
+    #[tokio::test]
+    async fn test_read_file_nonexistent() {
+        let temp_dir = TempDir::new().unwrap();
+        let executor = create_test_executor(temp_dir.path().to_path_buf(), false);
+        
+        let args = ToolCallArgs {
+            path: Some("nonexistent.txt".to_string()),
+            ..Default::default()
+        };
+
+        let result = executor.read_file(&args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
+    }
+
+    #[tokio::test]
+    async fn test_read_file_truncation() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let test_file = workdir.join("large.txt");
+        
+        let large_content = "x".repeat(10000);
+        std::fs::write(&test_file, &large_content).unwrap();
+
+        let executor = create_test_executor(workdir, false);
+        let args = ToolCallArgs {
+            path: Some("large.txt".to_string()),
+            max_bytes: Some(100),
+            ..Default::default()
+        };
+
+        let result = executor.read_file(&args).await;
+        assert!(result.is_ok());
+        let content = result.unwrap();
+        assert_eq!(content.len(), 100);
+    }
+
+    #[tokio::test]
+    async fn test_read_file_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let subdir = workdir.join("subdir");
+        std::fs::create_dir(&subdir).unwrap();
+
+        let executor = create_test_executor(workdir, false);
+        let args = ToolCallArgs {
+            path: Some("subdir".to_string()),
+            ..Default::default()
+        };
+
+        let result = executor.read_file(&args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not a file"));
+    }
+
+    #[tokio::test]
+    async fn test_write_file_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let executor = create_test_executor(workdir.clone(), false);
+
+        let args = ToolCallArgs {
+            path: Some("output.txt".to_string()),
+            content: Some("Test content".to_string()),
+            ..Default::default()
+        };
+
+        let result = executor.write_file(&args).await;
+        assert!(result.is_ok());
+
+        // Verify file was written
+        let written_content = std::fs::read_to_string(workdir.join("output.txt")).unwrap();
+        assert_eq!(written_content, "Test content");
+    }
+
+    #[tokio::test]
+    async fn test_write_file_creates_parent_dirs() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let executor = create_test_executor(workdir.clone(), false);
+
+        let args = ToolCallArgs {
+            path: Some("nested/deep/output.txt".to_string()),
+            content: Some("Nested content".to_string()),
+            ..Default::default()
+        };
+
+        let result = executor.write_file(&args).await;
+        assert!(result.is_ok());
+
+        // Verify file and directories were created
+        let nested_file = workdir.join("nested/deep/output.txt");
+        assert!(nested_file.exists());
+        let content = std::fs::read_to_string(nested_file).unwrap();
+        assert_eq!(content, "Nested content");
+    }
+
+    #[tokio::test]
+    async fn test_write_file_missing_content() {
+        let temp_dir = TempDir::new().unwrap();
+        let executor = create_test_executor(temp_dir.path().to_path_buf(), false);
+
+        let args = ToolCallArgs {
+            path: Some("test.txt".to_string()),
+            content: None,
+            ..Default::default()
+        };
+
+        let result = executor.write_file(&args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Content"));
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        
+        // Create test files and directories
+        std::fs::write(workdir.join("file1.txt"), "content").unwrap();
+        std::fs::write(workdir.join("file2.txt"), "content").unwrap();
+        std::fs::create_dir(workdir.join("subdir")).unwrap();
+
+        let executor = create_test_executor(workdir, false);
+        let args = ToolCallArgs {
+            path: Some(".".to_string()),
+            ..Default::default()
+        };
+
+        let result = executor.list_directory(&args).await;
+        assert!(result.is_ok());
+        
+        let listing = result.unwrap();
+        assert!(listing.contains("file1.txt"));
+        assert!(listing.contains("file2.txt"));
+        assert!(listing.contains("subdir/"));
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_nonexistent() {
+        let temp_dir = TempDir::new().unwrap();
+        let executor = create_test_executor(temp_dir.path().to_path_buf(), false);
+
+        let args = ToolCallArgs {
+            path: Some("nonexistent_dir".to_string()),
+            ..Default::default()
+        };
+
+        let result = executor.list_directory(&args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
+    }
+
+    #[tokio::test]
+    async fn test_list_directory_on_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        std::fs::write(workdir.join("file.txt"), "content").unwrap();
+
+        let executor = create_test_executor(workdir, false);
+        let args = ToolCallArgs {
+            path: Some("file.txt".to_string()),
+            ..Default::default()
+        };
+
+        let result = executor.list_directory(&args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not a directory"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_file_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let test_file = workdir.join("delete_me.txt");
+        std::fs::write(&test_file, "content").unwrap();
+
+        let executor = create_test_executor(workdir, false);
+        let args = ToolCallArgs {
+            path: Some("delete_me.txt".to_string()),
+            recursive: Some(false),
+            ..Default::default()
+        };
+
+        assert!(test_file.exists());
+        let result = executor.delete_path(&args).await;
+        assert!(result.is_ok());
+        assert!(!test_file.exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_directory_recursive() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let dir_path = workdir.join("delete_dir");
+        std::fs::create_dir(&dir_path).unwrap();
+        std::fs::write(dir_path.join("file.txt"), "content").unwrap();
+
+        let executor = create_test_executor(workdir, false);
+        let args = ToolCallArgs {
+            path: Some("delete_dir".to_string()),
+            recursive: Some(true),
+            ..Default::default()
+        };
+
+        assert!(dir_path.exists());
+        let result = executor.delete_path(&args).await;
+        assert!(result.is_ok());
+        assert!(!dir_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_delete_nonexistent() {
+        let temp_dir = TempDir::new().unwrap();
+        let executor = create_test_executor(temp_dir.path().to_path_buf(), false);
+
+        let args = ToolCallArgs {
+            path: Some("nonexistent.txt".to_string()),
+            ..Default::default()
+        };
+
+        let result = executor.delete_path(&args).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
+    }
+
+    // ===== Integration Tests =====
+
+    #[tokio::test]
+    async fn test_full_workflow_create_read_delete() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let executor = create_test_executor(workdir.clone(), false);
+
+        // 1. Write a file
+        let write_args = ToolCallArgs {
+            path: Some("workflow.txt".to_string()),
+            content: Some("Workflow test".to_string()),
+            ..Default::default()
+        };
+        let write_result = executor.write_file(&write_args).await;
+        assert!(write_result.is_ok());
+
+        // 2. Read the file back
+        let read_args = ToolCallArgs {
+            path: Some("workflow.txt".to_string()),
+            max_bytes: Some(1000),
+            ..Default::default()
+        };
+        let read_result = executor.read_file(&read_args).await;
+        assert!(read_result.is_ok());
+        assert_eq!(read_result.unwrap(), "Workflow test");
+
+        // 3. Delete the file
+        let delete_args = ToolCallArgs {
+            path: Some("workflow.txt".to_string()),
+            ..Default::default()
+        };
+        let delete_result = executor.delete_path(&delete_args).await;
+        assert!(delete_result.is_ok());
+
+        // 4. Verify file is gone
+        assert!(!workdir.join("workflow.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn test_unicode_filename_handling() {
+        let temp_dir = TempDir::new().unwrap();
+        let workdir = temp_dir.path().to_path_buf();
+        let executor = create_test_executor(workdir.clone(), false);
+
+        let unicode_name = "test_文件_テスト.txt";
+        let write_args = ToolCallArgs {
+            path: Some(unicode_name.to_string()),
+            content: Some("Unicode content 🚀".to_string()),
+            ..Default::default()
+        };
+
+        let write_result = executor.write_file(&write_args).await;
+        assert!(write_result.is_ok());
+
+        let read_args = ToolCallArgs {
+            path: Some(unicode_name.to_string()),
+            max_bytes: Some(1000),
+            ..Default::default()
+        };
+        let read_result = executor.read_file(&read_args).await;
+        assert!(read_result.is_ok());
+        assert_eq!(read_result.unwrap(), "Unicode content 🚀");
     }
 }
