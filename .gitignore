@@ -11,6 +11,11 @@ rust-backend/target
 .env
 .venv
 
+# Test coverage reports
+coverage
+.nyc_output
+*.lcov
+
 # Security: Prevent committing credentials and secrets
 *.key
 *.pem
