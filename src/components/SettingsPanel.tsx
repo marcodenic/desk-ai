@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
+import { getName, getVersion } from "@tauri-apps/api/app";
 import { Loader2, FolderOpen, RefreshCcw, AlertCircle, CheckCircle2, ChevronDown, ChevronRight, FileText } from "lucide-react";
 
 import type { BackendStatus, Provider, Settings } from "../types";
@@ -86,6 +87,7 @@ function SettingsPanel({
   onReset,
   className,
 }: SettingsPanelProps) {
+  const [appVersion, setAppVersion] = useState<string>('');
   const [models, setModels] = useState<Record<Provider, string[]>>({
     anthropic: [],
     openai: [],
@@ -119,6 +121,11 @@ function SettingsPanel({
 
     return errors;
   };
+
+  // Fetch app version
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => setAppVersion('unknown'));
+  }, []);
 
   // Validate on settings change
   useEffect(() => {
@@ -190,7 +197,14 @@ function SettingsPanel({
   return (
     <div className="flex h-full flex-col overflow-hidden bg-black">
       <div className="flex items-center justify-between border-b border-border px-4 py-3 min-h-[53px]">
-        <h2 className="text-sm font-medium">Settings</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium">Settings</h2>
+          {appVersion && (
+            <Badge variant="outline" className="text-xs px-1.5 py-0.5 h-auto">
+              v{appVersion}
+            </Badge>
+          )}
+        </div>
         {statusBadge}
       </div>
 

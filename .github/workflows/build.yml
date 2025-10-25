@@ -70,7 +70,10 @@ jobs:
           mkdir -p src-tauri/bin
           cp rust-backend/target/${{ matrix.target }}/release/desk-ai-backend \
              src-tauri/bin/desk-ai-backend-${{ matrix.target }}
+          cp rust-backend/target/${{ matrix.target }}/release/desk-ai-backend \
+             src-tauri/bin/desk-ai-backend
           chmod +x src-tauri/bin/desk-ai-backend-${{ matrix.target }}
+          chmod +x src-tauri/bin/desk-ai-backend
 
       - name: Copy backend binary (Windows)
         if: matrix.os == 'windows-latest'
@@ -78,6 +81,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path src-tauri\bin
           Copy-Item rust-backend\target\${{ matrix.target }}\release\desk-ai-backend.exe `
                     src-tauri\bin\desk-ai-backend-${{ matrix.target }}.exe
+          Copy-Item rust-backend\target\${{ matrix.target }}\release\desk-ai-backend.exe `
+                    src-tauri\bin\desk-ai-backend.exe
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
