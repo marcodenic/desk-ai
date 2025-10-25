@@ -870,11 +870,52 @@ impl ToolExecutor {
 
         // If not in system-wide mode, enforce sandbox
         if !self.config.allow_system_wide {
-            // Canonicalize workdir for comparison
+            // Canonicalize both paths for comparison to handle symlinks properly
             let workdir_canonical = self.config.workdir.canonicalize()
                 .unwrap_or_else(|_| self.config.workdir.clone());
             
-            if !resolved.starts_with(&workdir_canonical) {
+            // For the resolved path, we need to handle the case where the target file doesn't exist
+            // In that case, canonicalize the parent directory and reconstruct the path
+            let resolved_canonical = if resolved.exists() {
+                resolved.canonicalize().unwrap_or_else(|_| resolved.clone())
+            } else {
+                // If the file doesn't exist, we need to find the first existing parent directory
+                // and canonicalize that, then reconstruct the path
+                let mut current_path = resolved.clone();
+                let mut non_existing_components = Vec::new();
+                
+                // Walk up the path to find an existing directory
+                while !current_path.exists() {
+                    if let Some(name) = current_path.file_name() {
+                        non_existing_components.push(name.to_os_string());
+                    }
+                    if let Some(parent) = current_path.parent() {
+                        current_path = parent.to_path_buf();
+                    } else {
+                        // Can't find existing parent, fall back to original path
+                        break;
+                    }
+                }
+                
+                // Canonicalize the existing part
+                if current_path.exists() {
+                    if let Ok(canonical_existing) = current_path.canonicalize() {
+                        // Reconstruct the path with non-existing components
+                        non_existing_components.reverse();
+                        let mut result = canonical_existing;
+                        for component in non_existing_components {
+                            result = result.join(component);
+                        }
+                        result
+                    } else {
+                        resolved.clone()
+                    }
+                } else {
+                    resolved.clone()
+                }
+            };
+            
+            if !resolved_canonical.starts_with(&workdir_canonical) {
                 return Err(anyhow!("Access outside of workspace is denied"));
             }
         }
